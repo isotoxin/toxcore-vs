@@ -6,4 +6,5 @@ How to build:
 3. run build_libs.cmd
 
 Another way - create solution and add project (*.vcxproj) files, then build from VS gui
+
 PS. There are yasm64.exe in vpx folder - it necessary to build asm files of vpx lib. So, if you use 32 bit windows, you have to download yasm32 here: http://yasm.tortall.net/Download.html
