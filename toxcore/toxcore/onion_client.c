@@ -786,13 +786,7 @@ int send_onion_data(Onion_Client *onion_c, int friend_num, const uint8_t *data, 
     if (length == 0)
         return -1;
 
-    uint8_t nonce[crypto_box_NONCEBYTES];
-    random_nonce(nonce);
-
-    //uint8_t packet[DATA_IN_RESPONSE_MIN_SIZE + length]; // C99
-
     unsigned int i, good_nodes[MAX_ONION_CLIENTS], num_good = 0, num_nodes = 0;
-    Onion_Path path[MAX_ONION_CLIENTS];
     Onion_Node *list_nodes = onion_c->friends_list[friend_num].clients_list;
 
     for (i = 0; i < MAX_ONION_CLIENTS; ++i) {
@@ -802,9 +796,6 @@ int send_onion_data(Onion_Client *onion_c, int friend_num, const uint8_t *data, 
         ++num_nodes;
 
         if (list_nodes[i].is_stored) {
-            if (random_path(onion_c, &onion_c->onion_paths_friends, ~0, &path[num_good]) == -1)
-                continue;
-
             good_nodes[num_good] = i;
             ++num_good;
         }
@@ -813,11 +804,12 @@ int send_onion_data(Onion_Client *onion_c, int friend_num, const uint8_t *data, 
     if (num_good < (num_nodes / 4) + 1)
         return -1;
 
-    unsigned int good = 0;
+    uint8_t nonce[crypto_box_NONCEBYTES];
+    random_nonce(nonce);
 
-    // Rotkaermota : encrypt packet immediately before send due encrypt takes lot of cpu and it should be done only if encrypded data will be send
+    //uint8_t packet[DATA_IN_RESPONSE_MIN_SIZE + length]; // C99
     size_t sizeof_packet = sizeof(uint8_t) * (DATA_IN_RESPONSE_MIN_SIZE + length); // -C99
-    uint8_t* packet = _alloca(sizeof_packet); // -C99
+    uint8_t* packet = _alloca( sizeof_packet ); // -C99
     memcpy(packet, onion_c->c->self_public_key, crypto_box_PUBLICKEYBYTES);
     int len = encrypt_data(onion_c->friends_list[friend_num].real_client_id, onion_c->c->self_secret_key, nonce, data,
                            length, packet + crypto_box_PUBLICKEYBYTES);
@@ -825,7 +817,14 @@ int send_onion_data(Onion_Client *onion_c, int friend_num, const uint8_t *data, 
     if ((uint32_t)len + crypto_box_PUBLICKEYBYTES != /*sizeof(packet)*/ sizeof_packet)
         return -1;
 
+    unsigned int good = 0;
+
     for (i = 0; i < num_good; ++i) {
+        Onion_Path path;
+
+        if (random_path(onion_c, &onion_c->onion_paths_friends, ~0, &path) == -1)
+            continue;
+
         uint8_t o_packet[ONION_MAX_PACKET_SIZE];
         len = create_data_request(o_packet, sizeof(o_packet), onion_c->friends_list[friend_num].real_client_id,
                                   list_nodes[good_nodes[i]].data_public_key, nonce, packet, /*sizeof(packet)*/ sizeof_packet);
@@ -833,7 +832,7 @@ int send_onion_data(Onion_Client *onion_c, int friend_num, const uint8_t *data, 
         if (len == -1)
             continue;
 
-        if (send_onion_packet_tcp_udp(onion_c, &path[i], list_nodes[good_nodes[i]].ip_port, o_packet, len) == 0)
+        if (send_onion_packet_tcp_udp(onion_c, &path, list_nodes[good_nodes[i]].ip_port, o_packet, len) == 0)
             ++good;
     }
 

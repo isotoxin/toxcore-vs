@@ -299,6 +299,7 @@ static void inverse_transform_block(MACROBLOCKD* xd, int plane, int block,
 struct intra_args {
   VP9_COMMON *cm;
   MACROBLOCKD *xd;
+  FRAME_COUNTS *counts;
   vp9_reader *r;
 };
 
@@ -323,7 +324,7 @@ static void predict_and_reconstruct_intra_block(int plane, int block,
                           x, y, plane);
 
   if (!mi->mbmi.skip) {
-    const int eob = vp9_decode_block_tokens(cm, xd, plane, block,
+    const int eob = vp9_decode_block_tokens(cm, xd, args->counts, plane, block,
                                             plane_bsize, x, y, tx_size,
                                             args->r);
     inverse_transform_block(xd, plane, block, tx_size, dst, pd->dst.stride,
@@ -335,6 +336,7 @@ struct inter_args {
   VP9_COMMON *cm;
   MACROBLOCKD *xd;
   vp9_reader *r;
+  FRAME_COUNTS *counts;
   int *eobtotal;
 };
 
@@ -347,8 +349,8 @@ static void reconstruct_inter_block(int plane, int block,
   struct macroblockd_plane *const pd = &xd->plane[plane];
   int x, y, eob;
   txfrm_block_to_raster_xy(plane_bsize, tx_size, block, &x, &y);
-  eob = vp9_decode_block_tokens(cm, xd, plane, block, plane_bsize, x, y,
-                                tx_size, args->r);
+  eob = vp9_decode_block_tokens(cm, xd, args->counts, plane, block, plane_bsize,
+                                x, y, tx_size, args->r);
   inverse_transform_block(xd, plane, block, tx_size,
                           &pd->dst.buf[4 * y * pd->dst.stride + 4 * x],
                           pd->dst.stride, eob);
@@ -385,13 +387,14 @@ static MB_MODE_INFO *set_offsets(VP9_COMMON *const cm, MACROBLOCKD *const xd,
 }
 
 static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
+                         FRAME_COUNTS *counts,
                          const TileInfo *const tile,
                          int mi_row, int mi_col,
                          vp9_reader *r, BLOCK_SIZE bsize) {
   VP9_COMMON *const cm = &pbi->common;
   const int less8x8 = bsize < BLOCK_8X8;
   MB_MODE_INFO *mbmi = set_offsets(cm, xd, tile, bsize, mi_row, mi_col);
-  vp9_read_mode_info(pbi, xd, tile, mi_row, mi_col, r);
+  vp9_read_mode_info(pbi, xd, counts, tile, mi_row, mi_col, r);
 
   if (less8x8)
     bsize = BLOCK_8X8;
@@ -405,7 +408,7 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
   }
 
   if (!is_inter_block(mbmi)) {
-    struct intra_args arg = { cm, xd, r };
+    struct intra_args arg = { cm, xd, counts, r };
     vp9_foreach_transformed_block(xd, bsize,
                                   predict_and_reconstruct_intra_block, &arg);
   } else {
@@ -415,7 +418,7 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
     // Reconstruction
     if (!mbmi->skip) {
       int eobtotal = 0;
-      struct inter_args arg = { cm, xd, r, &eobtotal };
+      struct inter_args arg = { cm, xd, r, counts, &eobtotal };
       vp9_foreach_transformed_block(xd, bsize, reconstruct_inter_block, &arg);
       if (!less8x8 && eobtotal == 0)
         mbmi->skip = 1;  // skip loopfilter
@@ -425,7 +428,8 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
   xd->corrupted |= vp9_reader_has_error(r);
 }
 
-static PARTITION_TYPE read_partition(VP9_COMMON *cm, MACROBLOCKD *xd, int hbs,
+static PARTITION_TYPE read_partition(VP9_COMMON *cm, MACROBLOCKD *xd,
+                                     FRAME_COUNTS *counts, int hbs,
                                      int mi_row, int mi_col, BLOCK_SIZE bsize,
                                      vp9_reader *r) {
   const int ctx = partition_plane_context(xd, mi_row, mi_col, bsize);
@@ -444,12 +448,13 @@ static PARTITION_TYPE read_partition(VP9_COMMON *cm, MACROBLOCKD *xd, int hbs,
     p = PARTITION_SPLIT;
 
   if (!cm->frame_parallel_decoding_mode)
-    ++cm->counts.partition[ctx][p];
+    ++counts->partition[ctx][p];
 
   return p;
 }
 
 static void decode_partition(VP9Decoder *const pbi, MACROBLOCKD *const xd,
+                             FRAME_COUNTS *counts,
                              const TileInfo *const tile,
                              int mi_row, int mi_col,
                              vp9_reader* r, BLOCK_SIZE bsize) {
@@ -461,34 +466,37 @@ static void decode_partition(VP9Decoder *const pbi, MACROBLOCKD *const xd,
   if (mi_row >= cm->mi_rows || mi_col >= cm->mi_cols)
     return;
 
-  partition = read_partition(cm, xd, hbs, mi_row, mi_col, bsize, r);
+  partition = read_partition(cm, xd, counts, hbs, mi_row, mi_col, bsize, r);
   subsize = get_subsize(bsize, partition);
   uv_subsize = ss_size_lookup[subsize][cm->subsampling_x][cm->subsampling_y];
   if (subsize >= BLOCK_8X8 && uv_subsize == BLOCK_INVALID)
     vpx_internal_error(xd->error_info,
                        VPX_CODEC_CORRUPT_FRAME, "Invalid block size.");
   if (subsize < BLOCK_8X8) {
-    decode_block(pbi, xd, tile, mi_row, mi_col, r, subsize);
+    decode_block(pbi, xd, counts, tile, mi_row, mi_col, r, subsize);
   } else {
     switch (partition) {
       case PARTITION_NONE:
-        decode_block(pbi, xd, tile, mi_row, mi_col, r, subsize);
+        decode_block(pbi, xd, counts, tile, mi_row, mi_col, r, subsize);
         break;
       case PARTITION_HORZ:
-        decode_block(pbi, xd, tile, mi_row, mi_col, r, subsize);
+        decode_block(pbi, xd, counts, tile, mi_row, mi_col, r, subsize);
         if (mi_row + hbs < cm->mi_rows)
-          decode_block(pbi, xd, tile, mi_row + hbs, mi_col, r, subsize);
+          decode_block(pbi, xd, counts, tile, mi_row + hbs, mi_col, r, subsize);
         break;
       case PARTITION_VERT:
-        decode_block(pbi, xd, tile, mi_row, mi_col, r, subsize);
+        decode_block(pbi, xd, counts, tile, mi_row, mi_col, r, subsize);
         if (mi_col + hbs < cm->mi_cols)
-          decode_block(pbi, xd, tile, mi_row, mi_col + hbs, r, subsize);
+          decode_block(pbi, xd, counts, tile, mi_row, mi_col + hbs, r, subsize);
         break;
       case PARTITION_SPLIT:
-        decode_partition(pbi, xd, tile, mi_row,       mi_col,       r, subsize);
-        decode_partition(pbi, xd, tile, mi_row,       mi_col + hbs, r, subsize);
-        decode_partition(pbi, xd, tile, mi_row + hbs, mi_col,       r, subsize);
-        decode_partition(pbi, xd, tile, mi_row + hbs, mi_col + hbs, r, subsize);
+        decode_partition(pbi, xd, counts, tile, mi_row, mi_col, r, subsize);
+        decode_partition(pbi, xd, counts, tile, mi_row, mi_col + hbs, r,
+                         subsize);
+        decode_partition(pbi, xd, counts, tile, mi_row + hbs, mi_col, r,
+                         subsize);
+        decode_partition(pbi, xd, counts, tile, mi_row + hbs, mi_col + hbs, r,
+                         subsize);
         break;
       default:
         assert(0 && "Invalid partition type");
@@ -983,8 +991,8 @@ static const uint8_t *decode_tiles(VP9Decoder *pbi,
         vp9_zero(tile_data->xd.left_seg_context);
         for (mi_col = tile.mi_col_start; mi_col < tile.mi_col_end;
              mi_col += MI_BLOCK_SIZE) {
-          decode_partition(pbi, &tile_data->xd, &tile, mi_row, mi_col,
-                           &tile_data->bit_reader, BLOCK_64X64);
+          decode_partition(pbi, &tile_data->xd, &cm->counts, &tile, mi_row,
+                           mi_col, &tile_data->bit_reader, BLOCK_64X64);
         }
         pbi->mb.corrupted |= tile_data->xd.corrupted;
         if (pbi->mb.corrupted)
@@ -1056,8 +1064,9 @@ static int tile_worker_hook(TileWorkerData *const tile_data,
     vp9_zero(tile_data->xd.left_seg_context);
     for (mi_col = tile->mi_col_start; mi_col < tile->mi_col_end;
          mi_col += MI_BLOCK_SIZE) {
-      decode_partition(tile_data->pbi, &tile_data->xd, tile,
-                       mi_row, mi_col, &tile_data->bit_reader, BLOCK_64X64);
+      decode_partition(tile_data->pbi, &tile_data->xd, &tile_data->counts,
+                       tile, mi_row, mi_col, &tile_data->bit_reader,
+                       BLOCK_64X64);
     }
   }
   return !tile_data->xd.corrupted;
@@ -1073,6 +1082,105 @@ static int compare_tile_buffers(const void *a, const void *b) {
     return 0;
   } else {
     return -1;
+  }
+}
+
+// Accumulate frame counts.
+static void accumulate_frame_counts(VP9_COMMON *cm, FRAME_COUNTS *counts) {
+  int i, j, k, l, m, n;
+
+  for (i = 0; i < BLOCK_SIZE_GROUPS; i++)
+    for (j = 0; j < INTRA_MODES; j++)
+      cm->counts.y_mode[i][j] += counts->y_mode[i][j];
+
+  for (i = 0; i < INTRA_MODES; i++)
+    for (j = 0; j < INTRA_MODES; j++)
+      cm->counts.uv_mode[i][j] += counts->uv_mode[i][j];
+
+  for (i = 0; i < PARTITION_CONTEXTS; i++)
+    for (j = 0; j < PARTITION_TYPES; j++)
+      cm->counts.partition[i][j] += counts->partition[i][j];
+
+  for (i = 0; i < TX_SIZES; i++)
+    for (j = 0; j < PLANE_TYPES; j++)
+      for (k = 0; k < REF_TYPES; k++)
+        for (l = 0; l < COEF_BANDS; l++)
+          for (m = 0; m < COEFF_CONTEXTS; m++) {
+            cm->counts.eob_branch[i][j][k][l][m] +=
+                counts->eob_branch[i][j][k][l][m];
+            for (n = 0; n < UNCONSTRAINED_NODES + 1; n++)
+              cm->counts.coef[i][j][k][l][m][n] +=
+                  counts->coef[i][j][k][l][m][n];
+          }
+
+  for (i = 0; i < SWITCHABLE_FILTER_CONTEXTS; i++)
+    for (j = 0; j < SWITCHABLE_FILTERS; j++)
+      cm->counts.switchable_interp[i][j] += counts->switchable_interp[i][j];
+
+  for (i = 0; i < INTER_MODE_CONTEXTS; i++)
+    for (j = 0; j < INTER_MODES; j++)
+      cm->counts.inter_mode[i][j] += counts->inter_mode[i][j];
+
+  for (i = 0; i < INTRA_INTER_CONTEXTS; i++)
+    for (j = 0; j < 2; j++)
+      cm->counts.intra_inter[i][j] += counts->intra_inter[i][j];
+
+  for (i = 0; i < COMP_INTER_CONTEXTS; i++)
+    for (j = 0; j < 2; j++)
+      cm->counts.comp_inter[i][j] += counts->comp_inter[i][j];
+
+  for (i = 0; i < REF_CONTEXTS; i++)
+    for (j = 0; j < 2; j++)
+      for (k = 0; k < 2; k++)
+      cm->counts.single_ref[i][j][k] += counts->single_ref[i][j][k];
+
+  for (i = 0; i < REF_CONTEXTS; i++)
+    for (j = 0; j < 2; j++)
+      cm->counts.comp_ref[i][j] += counts->comp_ref[i][j];
+
+  for (i = 0; i < TX_SIZE_CONTEXTS; i++) {
+    for (j = 0; j < TX_SIZES; j++)
+      cm->counts.tx.p32x32[i][j] += counts->tx.p32x32[i][j];
+
+    for (j = 0; j < TX_SIZES - 1; j++)
+      cm->counts.tx.p16x16[i][j] += counts->tx.p16x16[i][j];
+
+    for (j = 0; j < TX_SIZES - 2; j++)
+      cm->counts.tx.p8x8[i][j] += counts->tx.p8x8[i][j];
+  }
+
+  for (i = 0; i < SKIP_CONTEXTS; i++)
+    for (j = 0; j < 2; j++)
+      cm->counts.skip[i][j] += counts->skip[i][j];
+
+  for (i = 0; i < MV_JOINTS; i++)
+    cm->counts.mv.joints[i] += counts->mv.joints[i];
+
+  for (k = 0; k < 2; k++) {
+    nmv_component_counts *comps = &cm->counts.mv.comps[k];
+    nmv_component_counts *comps_t = &counts->mv.comps[k];
+
+    for (i = 0; i < 2; i++) {
+      comps->sign[i] += comps_t->sign[i];
+      comps->class0_hp[i] += comps_t->class0_hp[i];
+      comps->hp[i] += comps_t->hp[i];
+    }
+
+    for (i = 0; i < MV_CLASSES; i++)
+      comps->classes[i] += comps_t->classes[i];
+
+    for (i = 0; i < CLASS0_SIZE; i++) {
+      comps->class0[i] += comps_t->class0[i];
+      for (j = 0; j < MV_FP_SIZE; j++)
+        comps->class0_fp[i][j] += comps_t->class0_fp[i][j];
+    }
+
+    for (i = 0; i < MV_OFFSET_BITS; i++)
+      for (j = 0; j < 2; j++)
+        comps->bits[i][j] += comps_t->bits[i][j];
+
+    for (i = 0; i < MV_FP_SIZE; i++)
+      comps->fp[i] += comps_t->fp[i];
   }
 }
 
@@ -1162,6 +1270,17 @@ static const uint8_t *decode_tiles_mt(VP9Decoder *pbi,
     }
   }
 
+  // Initialize thread frame counts.
+  if (!cm->frame_parallel_decoding_mode) {
+    int i;
+
+    for (i = 0; i < num_workers; ++i) {
+      TileWorkerData *const tile_data =
+          (TileWorkerData*)pbi->tile_workers[i].data1;
+      vp9_zero(tile_data->counts);
+    }
+  }
+
   n = 0;
   while (n < tile_cols) {
     int i;
@@ -1174,7 +1293,7 @@ static const uint8_t *decode_tiles_mt(VP9Decoder *pbi,
       tile_data->pbi = pbi;
       tile_data->xd = pbi->mb;
       tile_data->xd.corrupted = 0;
-      vp9_tile_init(tile, &pbi->common, 0, buf->col);
+      vp9_tile_init(tile, cm, 0, buf->col);
       setup_token_decoder(buf->data, data_end, buf->size, &cm->error,
                           &tile_data->bit_reader, pbi->decrypt_cb,
                           pbi->decrypt_state);
@@ -1207,6 +1326,15 @@ static const uint8_t *decode_tiles_mt(VP9Decoder *pbi,
           (TileWorkerData*)pbi->tile_workers[final_worker].data1;
       bit_reader_end = vp9_reader_find_end(&tile_data->bit_reader);
       final_worker = -1;
+    }
+
+    // Accumulate thread frame counts.
+    if (n >= tile_cols && !cm->frame_parallel_decoding_mode) {
+      for (i = 0; i < num_workers; ++i) {
+        TileWorkerData *const tile_data =
+            (TileWorkerData*)pbi->tile_workers[i].data1;
+        accumulate_frame_counts(cm, &tile_data->counts);
+      }
     }
   }
 
@@ -1663,10 +1791,8 @@ void vp9_decode_frame(VP9Decoder *pbi,
     vp9_frameworker_unlock_stats(worker);
   }
 
-  // TODO(jzern): remove frame_parallel_decoding_mode restriction for
-  // single-frame tile decoding.
-  if (pbi->max_threads > 1 && tile_rows == 1 && tile_cols > 1 &&
-      cm->frame_parallel_decoding_mode) {
+  if (pbi->max_threads > 1 && tile_rows == 1 && tile_cols > 1) {
+    // Multi-threaded tile decoder
     *p_data_end = decode_tiles_mt(pbi, data + first_partition_size, data_end);
     if (!xd->corrupted) {
       // If multiple threads are used to decode tiles, then we use those threads
@@ -1812,12 +1938,6 @@ void dec_build_inter_predictors(VP9Decoder *const pbi, MACROBLOCKD *xd,
                ? average_split_mvs(pd, mi, ref, block)
                : mi->mbmi.mv[ref].as_mv;
 
-
-    // TODO(jkoleszar): This clamping is done in the incorrect place for the
-    // scaling case. It needs to be done on the scaled MV, not the pre-scaling
-    // MV. Note however that it performs the subsampling aware scaling so
-    // that the result is always q4.
-    // mv_precision precision is MV_PRECISION_Q4.
     const MV mv_q4 = clamp_mv_to_umv_border_sb(xd, &mv, bw, bh,
                                                pd->subsampling_x,
                                                pd->subsampling_y);
@@ -1829,6 +1949,7 @@ void dec_build_inter_predictors(VP9Decoder *const pbi, MACROBLOCKD *xd,
     const int idx = xd->block_refs[ref]->idx;
     BufferPool *const pool = pbi->common.buffer_pool;
     RefCntBuffer *const ref_frame_buf = &pool->frame_bufs[idx];
+    const int is_scaled = vp9_is_scaled(sf);
 
     // Get reference frame pointer, width and height.
     if (plane == 0) {
@@ -1842,7 +1963,7 @@ void dec_build_inter_predictors(VP9Decoder *const pbi, MACROBLOCKD *xd,
                            : ref_frame_buf->buf.v_buffer;
     }
 
-    if (vp9_is_scaled(sf)) {
+    if (is_scaled) {
       // Co-ordinate of containing block to pixel precision.
       int x_start = (-xd->mb_to_left_edge >> (3 + pd->subsampling_x));
       int y_start = (-xd->mb_to_top_edge >> (3 + pd->subsampling_y));
@@ -1897,20 +2018,19 @@ void dec_build_inter_predictors(VP9Decoder *const pbi, MACROBLOCKD *xd,
 
     // Do border extension if there is motion or the
     // width/height is not a multiple of 8 pixels.
-    if (scaled_mv.col || scaled_mv.row ||
+    if (is_scaled || scaled_mv.col || scaled_mv.row ||
         (frame_width & 0x7) || (frame_height & 0x7)) {
-      int x_pad = 0, y_pad = 0;
-
       // Get reference block bottom right horizontal coordinate.
       int x1 = ((x0_16 + (w - 1) * xs) >> SUBPEL_BITS) + 1;
+      int x_pad = 0, y_pad = 0;
 
-      if (subpel_x || (sf->x_step_q4 & SUBPEL_MASK)) {
+      if (subpel_x || (sf->x_step_q4 != SUBPEL_SHIFTS)) {
         x0 -= VP9_INTERP_EXTEND - 1;
         x1 += VP9_INTERP_EXTEND;
         x_pad = 1;
       }
 
-      if (subpel_y || (sf->y_step_q4 & SUBPEL_MASK)) {
+      if (subpel_y || (sf->y_step_q4 != SUBPEL_SHIFTS)) {
         y0 -= VP9_INTERP_EXTEND - 1;
         y1 += VP9_INTERP_EXTEND;
         y_pad = 1;

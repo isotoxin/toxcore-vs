@@ -532,10 +532,9 @@ static vpx_codec_err_t encoder_set_config(vpx_codec_alg_priv_t *ctx,
   if (cfg->g_w != ctx->cfg.g_w || cfg->g_h != ctx->cfg.g_h) {
     if (cfg->g_lag_in_frames > 1 || cfg->g_pass != VPX_RC_ONE_PASS)
       ERROR("Cannot change width or height after initialization");
-    if ((ctx->cpi->initial_width && (int)cfg->g_w > ctx->cpi->initial_width) ||
+    if (!valid_ref_frame_size(ctx->cfg.g_w, ctx->cfg.g_h, cfg->g_w, cfg->g_h) ||
+        (ctx->cpi->initial_width && (int)cfg->g_w > ctx->cpi->initial_width) ||
         (ctx->cpi->initial_height && (int)cfg->g_h > ctx->cpi->initial_height))
-      ERROR("Cannot increase width or height larger than their initial values");
-    if (!valid_ref_frame_size(ctx->cfg.g_w, ctx->cfg.g_h, cfg->g_w, cfg->g_h))
       force_key = 1;
   }
 
@@ -744,6 +743,12 @@ static vpx_codec_err_t encoder_init(vpx_codec_ctx_t *ctx,
     if (priv->buffer_pool == NULL)
       return VPX_CODEC_MEM_ERROR;
 
+#if CONFIG_MULTITHREAD
+    if (pthread_mutex_init(&priv->buffer_pool->pool_mutex, NULL)) {
+      return VPX_CODEC_MEM_ERROR;
+    }
+#endif
+
     if (ctx->config.enc) {
       // Update the reference to the config structure to an internal copy.
       priv->cfg = *ctx->config.enc;
@@ -775,6 +780,9 @@ static vpx_codec_err_t encoder_init(vpx_codec_ctx_t *ctx,
 static vpx_codec_err_t encoder_destroy(vpx_codec_alg_priv_t *ctx) {
   free(ctx->cx_data);
   vp9_remove_compressor(ctx->cpi);
+#if CONFIG_MULTITHREAD
+  pthread_mutex_destroy(&ctx->buffer_pool->pool_mutex);
+#endif
   vpx_free(ctx->buffer_pool);
   vpx_free(ctx);
   return VPX_CODEC_OK;

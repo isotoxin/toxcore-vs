@@ -504,7 +504,7 @@ static void choose_partitioning(VP9_COMP *cpi,
   threshold_base = (int64_t)(threshold_multiplier *
       vp9_convert_qindex_to_q(cm->base_qindex, cm->bit_depth));
   threshold = threshold_base;
-  threshold_bsize_min = threshold_base << 6;
+  threshold_bsize_min = threshold_base << cpi->oxcf.speed;
   threshold_bsize_max = threshold_base;
 
   // Modify thresholds for key frame and for low-resolutions (set lower
@@ -528,12 +528,24 @@ static void choose_partitioning(VP9_COMP *cpi,
   sp = x->plane[0].src.stride;
 
   if (cm->frame_type != KEY_FRAME) {
+    MB_MODE_INFO *mbmi = &xd->mi[0].src_mi->mbmi;
+    unsigned int var = 0, sse;
     vp9_setup_pre_planes(xd, 0, yv12, mi_row, mi_col, sf);
+    mbmi->ref_frame[0] = LAST_FRAME;
+    mbmi->ref_frame[1] = NONE;
+    mbmi->sb_type = BLOCK_64X64;
+    mbmi->mv[0].as_int = 0;
+    vp9_build_inter_predictors_sb(xd, mi_row, mi_col, BLOCK_64X64);
 
-    xd->mi[0].src_mi->mbmi.ref_frame[0] = LAST_FRAME;
-    xd->mi[0].src_mi->mbmi.sb_type = BLOCK_64X64;
-    xd->mi[0].src_mi->mbmi.mv[0].as_int = 0;
-    vp9_build_inter_predictors_sby(xd, mi_row, mi_col, BLOCK_64X64);
+    for (i = 1; i <= 2; ++i) {
+      struct macroblock_plane  *p = &x->plane[i];
+      struct macroblockd_plane *pd = &xd->plane[i];
+      const BLOCK_SIZE bs = get_plane_block_size(BLOCK_64X64, pd);
+      var += cpi->fn_ptr[bs].vf(p->src.buf, p->src.stride,
+                                pd->dst.buf, pd->dst.stride, &sse);
+      if (sse > 2048)
+        x->color_sensitivity[i - 1] = 1;
+    }
 
     d = xd->plane[0].dst.buf;
     dp = xd->plane[0].dst.stride;
@@ -2737,6 +2749,10 @@ static MV_REFERENCE_FRAME get_frame_type(const VP9_COMP *cpi) {
 static TX_MODE select_tx_mode(const VP9_COMP *cpi, MACROBLOCKD *const xd) {
   if (xd->lossless)
     return ONLY_4X4;
+  if (cpi->common.frame_type == KEY_FRAME &&
+      cpi->sf.use_nonrd_pick_mode &&
+      cpi->sf.partition_search_type == VAR_BASED_PARTITION)
+    return ALLOW_16X16;
   if (cpi->sf.tx_size_search_method == USE_LARGESTALL)
     return ALLOW_32X32;
   else if (cpi->sf.tx_size_search_method == USE_FULL_RD||
@@ -3381,6 +3397,8 @@ static void encode_nonrd_sb_row(VP9_COMP *cpi,
     x->source_variance = UINT_MAX;
     vp9_zero(x->pred_mv);
     vp9_rd_cost_init(&dummy_rdc);
+    x->color_sensitivity[0] = 0;
+    x->color_sensitivity[1] = 0;
 
     // Set the partition type of the 64X64 block
     switch (sf->partition_search_type) {
@@ -3670,14 +3688,6 @@ static void encode_frame_internal(VP9_COMP *cpi) {
                  cm->uv_dc_delta_q == 0 &&
                  cm->uv_ac_delta_q == 0;
 
-  cm->tx_mode = select_tx_mode(cpi, xd);
-  if (cm->frame_type == KEY_FRAME &&
-      cpi->sf.use_nonrd_pick_mode &&
-      cpi->sf.partition_search_type == VAR_BASED_PARTITION) {
-    cm->tx_mode = ALLOW_16X16;
-  }
-
-
 #if CONFIG_VP9_HIGHBITDEPTH
   if (cm->use_highbitdepth)
     x->fwd_txm4x4 = xd->lossless ? vp9_highbd_fwht4x4 : vp9_highbd_fdct4x4;
@@ -3690,10 +3700,10 @@ static void encode_frame_internal(VP9_COMP *cpi) {
 #endif  // CONFIG_VP9_HIGHBITDEPTH
   x->itxm_add = xd->lossless ? vp9_iwht4x4_add : vp9_idct4x4_add;
 
-  if (xd->lossless) {
+  if (xd->lossless)
     x->optimize = 0;
-    cm->lf.filter_level = 0;
-  }
+
+  cm->tx_mode = select_tx_mode(cpi, xd);
 
   vp9_frame_init_quantizer(cpi);
 
@@ -3781,9 +3791,6 @@ static INTERP_FILTER get_interp_filter(
 
 void vp9_encode_frame(VP9_COMP *cpi) {
   VP9_COMMON *const cm = &cpi->common;
-  RD_OPT *const rd_opt = &cpi->rd;
-  FRAME_COUNTS *counts = cpi->td.counts;
-  RD_COUNTS *const rdc = &cpi->td.rd_counts;
 
   // In the longer term the encoder should be generalized to match the
   // decoder such that we allow compound where one of the 3 buffers has a
@@ -3807,6 +3814,9 @@ void vp9_encode_frame(VP9_COMP *cpi) {
 
   if (cpi->sf.frame_parameter_update) {
     int i;
+    RD_OPT *const rd_opt = &cpi->rd;
+    FRAME_COUNTS *counts = cpi->td.counts;
+    RD_COUNTS *const rdc = &cpi->td.rd_counts;
 
     // This code does a single RD pass over the whole frame assuming
     // either compound, single or hybrid prediction as per whatever has
@@ -3891,7 +3901,6 @@ void vp9_encode_frame(VP9_COMP *cpi) {
         count16x16_lp += counts->tx.p32x32[i][TX_16X16];
         count32x32 += counts->tx.p32x32[i][TX_32X32];
       }
-
       if (count4x4 == 0 && count16x16_lp == 0 && count16x16_16x16p == 0 &&
           count32x32 == 0) {
         cm->tx_mode = ALLOW_8X8;
@@ -4015,5 +4024,7 @@ static void encode_superblock(VP9_COMP *cpi, ThreadData *td,
           if (mi_col + x < cm->mi_cols && mi_row + y < cm->mi_rows)
             mi_8x8[mis * y + x].src_mi->mbmi.tx_size = tx_size;
     }
+    ++td->counts->tx.tx_totals[mbmi->tx_size];
+    ++td->counts->tx.tx_totals[get_uv_tx_size(mbmi, &xd->plane[1])];
   }
 }

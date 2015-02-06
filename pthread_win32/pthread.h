@@ -19,19 +19,6 @@ typedef struct
 #define pthread_w32_lock_thread_mask 0x000000FFFFFFFFFFll
 #define pthread_w32_lock_write_val   0x0000010000000000ll
 
-lock_t _inline SpecialInterlockedExchangeAdd64(volatile lock_t* lock, lock_t adding)
-{
-    lock_t old = *lock;
-    for (;;)
-    {
-        lock_t tmp = _InterlockedCompareExchange64(lock, old + adding, old);
-        if (tmp == old)
-            return old;
-        old = tmp;
-    }
-}
-
-
 typedef struct
 {
     int __dummy;
@@ -60,7 +47,7 @@ int _inline pthread_mutex_lock (pthread_mutex_t * mutex)
     lock_t val = *l;
     if ((val & pthread_w32_lock_thread_mask) == thread)
     {
-        SpecialInterlockedExchangeAdd64(l, pthread_w32_lock_write_val);
+        *l += pthread_w32_lock_write_val; // simple increment due mutex locked by current thread
         return 0;
     }
     thread |= pthread_w32_lock_write_val;
