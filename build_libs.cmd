@@ -11,7 +11,7 @@ set msb="C:\Program Files (x86)\MSBuild\12.0\Bin\MSBuild.exe"
 %msb% toxcore\vs\toxcore.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Debug
 %msb% toxcore\vs\toxcore.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release
 
-%msb% opus\win32\vs2013\opus.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release
+%msb% opus\opus.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release
 %msb% libsodium\libsodium.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release
 %msb% libvpx\libvpx.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release
 
