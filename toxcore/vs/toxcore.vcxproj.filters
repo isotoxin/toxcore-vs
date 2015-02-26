@@ -8,6 +8,9 @@
     <Filter Include="av">
       <UniqueIdentifier>{51c06343-bd89-4675-a8b8-bc6b26e65fa0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="dns">
+      <UniqueIdentifier>{2fa42112-bba3-4e1f-b6dc-476b0d83d68e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\toxcore\assoc.c">
@@ -87,6 +90,9 @@
     </ClCompile>
     <ClCompile Include="..\toxav\toxav.c">
       <Filter>av</Filter>
+    </ClCompile>
+    <ClCompile Include="..\toxdns\toxdns.c">
+      <Filter>dns</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -176,5 +182,8 @@
     </ClInclude>
     <ClInclude Include="config.h" />
     <ClInclude Include="unistd.h" />
+    <ClInclude Include="..\toxdns\toxdns.h">
+      <Filter>dns</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

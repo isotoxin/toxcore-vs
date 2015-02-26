@@ -160,23 +160,23 @@ static int decode(uint8_t *dest, uint8_t *src)
     while (*p) {
         uint8_t ch = *p++;
 
-        switch (ch) {
-            case 'A' ... 'Z': {
+        /*switch (ch)*/ for(;;) {
+            /*case 'A' ... 'Z':*/ if (ch >= 'A' && ch <= 'Z') {
                 ch = ch - 'A';
                 break;
             }
 
-            case 'a' ... 'z': {
+            /*case 'a' ... 'z':*/ if (ch >= 'a' && ch <= 'z') {
                 ch = ch - 'a';
                 break;
             }
 
-            case '0' ... '5': {
+            /*case '0' ... '5':*/ if (ch >= '0' && ch <= '5') {
                 ch = ch - '0' + 26;
                 break;
             }
 
-            default: {
+            /*default:*/ {
                 return - 1;
             }
         }
@@ -217,10 +217,14 @@ int tox_decrypt_dns3_TXT(void *dns3_object, uint8_t *tox_id, uint8_t *id_record,
     /*if (id_record_len > 255 || id_record_len <= (sizeof(uint32_t) + crypto_box_MACBYTES))
         return -1;*/
 
-    uint8_t id_record_null[id_record_len + 1];
+    //uint8_t id_record_null[id_record_len + 1]; // C99
+    size_t sizeof_id_record_null = sizeof(uint8_t) * (id_record_len + 1); // -C99
+    uint8_t* id_record_null = _alloca( sizeof_id_record_null ); // -C99
     memcpy(id_record_null, id_record, id_record_len);
     id_record_null[id_record_len] = 0;
-    uint8_t data[id_record_len];
+    //uint8_t data[id_record_len]; // C99
+    size_t sizeof_data = sizeof(uint8_t) * (id_record_len); // -C99
+    uint8_t* data = _alloca( sizeof_data ); // -C99
     int length = decode(data, id_record_null);
 
     if (length == -1)

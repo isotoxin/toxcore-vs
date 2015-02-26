@@ -687,16 +687,16 @@ static int handle_data_response(void *object, IP_Port source, const uint8_t *pac
             /*sizeof(plain)*/ sizeof_plain);
 }
 
-#define FAKEID_DATA_MIN_LENGTH (1 + sizeof(uint64_t) + crypto_box_PUBLICKEYBYTES)
-#define FAKEID_DATA_MAX_LENGTH (FAKEID_DATA_MIN_LENGTH + sizeof(Node_format)*MAX_SENT_NODES)
-static int handle_fakeid_announce(void *object, const uint8_t *source_pubkey, const uint8_t *data, uint16_t length)
+#define DHTPK_DATA_MIN_LENGTH (1 + sizeof(uint64_t) + crypto_box_PUBLICKEYBYTES)
+#define DHTPK_DATA_MAX_LENGTH (DHTPK_DATA_MIN_LENGTH + sizeof(Node_format)*MAX_SENT_NODES)
+static int handle_dhtpk_announce(void *object, const uint8_t *source_pubkey, const uint8_t *data, uint16_t length)
 {
     Onion_Client *onion_c = object;
 
-    if (length < FAKEID_DATA_MIN_LENGTH)
+    if (length < DHTPK_DATA_MIN_LENGTH)
         return 1;
 
-    if (length > FAKEID_DATA_MAX_LENGTH)
+    if (length > DHTPK_DATA_MAX_LENGTH)
         return 1;
 
     int friend_num = onion_friend_num(onion_c, source_pubkey);
@@ -720,7 +720,7 @@ static int handle_fakeid_announce(void *object, const uint8_t *source_pubkey, co
     onion_set_friend_DHT_pubkey(onion_c, friend_num, data + 1 + sizeof(uint64_t));
     onion_c->friends_list[friend_num].last_seen = unix_time();
 
-    uint16_t len_nodes = length - FAKEID_DATA_MIN_LENGTH;
+    uint16_t len_nodes = length - DHTPK_DATA_MIN_LENGTH;
 
     if (len_nodes != 0) {
         Node_format nodes[MAX_SENT_NODES];
@@ -839,14 +839,14 @@ int send_onion_data(Onion_Client *onion_c, int friend_num, const uint8_t *data, 
     return good;
 }
 
-/* Try to send the fakeid via the DHT instead of onion
+/* Try to send the dht public key via the DHT instead of onion
  *
  * Even if this function succeeds, the friend might not receive any data.
  *
  * return the number of packets sent on success
  * return -1 on failure.
  */
-static int send_dht_fakeid(const Onion_Client *onion_c, int friend_num, const uint8_t *data, uint16_t length)
+static int send_dht_dhtpk(const Onion_Client *onion_c, int friend_num, const uint8_t *data, uint16_t length)
 {
     if ((uint32_t)friend_num >= onion_c->num_friends)
         return -1;
@@ -878,18 +878,18 @@ static int send_dht_fakeid(const Onion_Client *onion_c, int friend_num, const ui
     return route_tofriend(onion_c->dht, onion_c->friends_list[friend_num].dht_public_key, packet, len);
 }
 
-static int handle_dht_fakeid(void *object, IP_Port source, const uint8_t *source_pubkey, const uint8_t *packet,
+static int handle_dht_dhtpk(void *object, IP_Port source, const uint8_t *source_pubkey, const uint8_t *packet,
                              uint16_t length)
 {
     Onion_Client *onion_c = object;
 
-    if (length < FAKEID_DATA_MIN_LENGTH + DATA_IN_RESPONSE_MIN_SIZE + crypto_box_NONCEBYTES)
+    if (length < DHTPK_DATA_MIN_LENGTH + DATA_IN_RESPONSE_MIN_SIZE + crypto_box_NONCEBYTES)
         return 1;
 
-    if (length > FAKEID_DATA_MAX_LENGTH + DATA_IN_RESPONSE_MIN_SIZE + crypto_box_NONCEBYTES)
+    if (length > DHTPK_DATA_MAX_LENGTH + DATA_IN_RESPONSE_MIN_SIZE + crypto_box_NONCEBYTES)
         return 1;
 
-    uint8_t plain[FAKEID_DATA_MAX_LENGTH];
+    uint8_t plain[DHTPK_DATA_MAX_LENGTH];
     int len = decrypt_data(packet, onion_c->c->self_secret_key, packet + crypto_box_PUBLICKEYBYTES,
                            packet + crypto_box_PUBLICKEYBYTES + crypto_box_NONCEBYTES,
                            length - (crypto_box_PUBLICKEYBYTES + crypto_box_NONCEBYTES), plain);
@@ -900,7 +900,7 @@ static int handle_dht_fakeid(void *object, IP_Port source, const uint8_t *source
     if (memcmp(source_pubkey, plain + 1 + sizeof(uint64_t), crypto_box_PUBLICKEYBYTES) != 0)
         return 1;
 
-    return handle_fakeid_announce(onion_c, packet, plain, len);
+    return handle_dhtpk_announce(onion_c, packet, plain, len);
 }
 /* Send the packets to tell our friends what our DHT public key is.
  *
@@ -911,13 +911,13 @@ static int handle_dht_fakeid(void *object, IP_Port source, const uint8_t *source
  * return the number of packets sent on success
  * return -1 on failure.
  */
-static int send_fakeid_announce(Onion_Client *onion_c, uint16_t friend_num, uint8_t onion_dht_both)
+static int send_dhtpk_announce(Onion_Client *onion_c, uint16_t friend_num, uint8_t onion_dht_both)
 {
     if (friend_num >= onion_c->num_friends)
         return -1;
 
-    uint8_t data[FAKEID_DATA_MAX_LENGTH];
-    data[0] = ONION_DATA_FAKEID;
+    uint8_t data[DHTPK_DATA_MAX_LENGTH];
+    data[0] = ONION_DATA_DHTPK;
     uint64_t no_replay = unix_time();
     host_to_net((uint8_t *)&no_replay, sizeof(no_replay));
     memcpy(data + 1, &no_replay, sizeof(no_replay));
@@ -929,7 +929,7 @@ static int send_fakeid_announce(Onion_Client *onion_c, uint16_t friend_num, uint
     int nodes_len = 0;
 
     if (num_nodes != 0) {
-        nodes_len = pack_nodes(data + FAKEID_DATA_MIN_LENGTH, FAKEID_DATA_MAX_LENGTH - FAKEID_DATA_MIN_LENGTH, nodes,
+        nodes_len = pack_nodes(data + DHTPK_DATA_MIN_LENGTH, DHTPK_DATA_MAX_LENGTH - DHTPK_DATA_MIN_LENGTH, nodes,
                                num_nodes);
 
         if (nodes_len <= 0)
@@ -939,10 +939,10 @@ static int send_fakeid_announce(Onion_Client *onion_c, uint16_t friend_num, uint
     int num1 = -1, num2 = -1;
 
     if (onion_dht_both != 1)
-        num1 = send_onion_data(onion_c, friend_num, data, FAKEID_DATA_MIN_LENGTH + nodes_len);
+        num1 = send_onion_data(onion_c, friend_num, data, DHTPK_DATA_MIN_LENGTH + nodes_len);
 
     if (onion_dht_both != 0)
-        num2 = send_dht_fakeid(onion_c, friend_num, data, FAKEID_DATA_MIN_LENGTH + nodes_len);
+        num2 = send_dht_dhtpk(onion_c, friend_num, data, DHTPK_DATA_MIN_LENGTH + nodes_len);
 
     if (num1 == -1)
         return num2;
@@ -1286,13 +1286,13 @@ static void do_friend(Onion_Client *onion_c, uint16_t friendnum)
             ++onion_c->friends_list[friendnum].run_count;
         }
 
-        /* send packets to friend telling them our fake DHT id. */
-        if (is_timeout(onion_c->friends_list[friendnum].last_dht_pk_onion_sent, ONION_FAKEID_INTERVAL))
-            if (send_fakeid_announce(onion_c, friendnum, 0) >= 1)
+        /* send packets to friend telling them our DHT public key. */
+        if (is_timeout(onion_c->friends_list[friendnum].last_dht_pk_onion_sent, ONION_DHTPK_SEND_INTERVAL))
+            if (send_dhtpk_announce(onion_c, friendnum, 0) >= 1)
                 onion_c->friends_list[friendnum].last_dht_pk_onion_sent = unix_time();
 
-        if (is_timeout(onion_c->friends_list[friendnum].last_dht_pk_dht_sent, DHT_FAKEID_INTERVAL))
-            if (send_fakeid_announce(onion_c, friendnum, 1) >= 1)
+        if (is_timeout(onion_c->friends_list[friendnum].last_dht_pk_dht_sent, DHT_DHTPK_SEND_INTERVAL))
+            if (send_dhtpk_announce(onion_c, friendnum, 1) >= 1)
                 onion_c->friends_list[friendnum].last_dht_pk_dht_sent = unix_time();
 
     }
@@ -1407,8 +1407,8 @@ Onion_Client *new_onion_client(Net_Crypto *c)
     crypto_box_keypair(onion_c->temp_public_key, onion_c->temp_secret_key);
     networking_registerhandler(onion_c->net, NET_PACKET_ANNOUNCE_RESPONSE, &handle_announce_response, onion_c);
     networking_registerhandler(onion_c->net, NET_PACKET_ONION_DATA_RESPONSE, &handle_data_response, onion_c);
-    oniondata_registerhandler(onion_c, ONION_DATA_FAKEID, &handle_fakeid_announce, onion_c);
-    cryptopacket_registerhandler(onion_c->dht, CRYPTO_PACKET_FAKEID, &handle_dht_fakeid, onion_c);
+    oniondata_registerhandler(onion_c, ONION_DATA_DHTPK, &handle_dhtpk_announce, onion_c);
+    cryptopacket_registerhandler(onion_c->dht, CRYPTO_PACKET_FAKEID, &handle_dht_dhtpk, onion_c);
     tcp_onion_response_handler(onion_c->c, &handle_tcp_onion, onion_c);
 
     return onion_c;
@@ -1423,7 +1423,7 @@ void kill_onion_client(Onion_Client *onion_c)
     realloc_onion_friends(onion_c, 0);
     networking_registerhandler(onion_c->net, NET_PACKET_ANNOUNCE_RESPONSE, NULL, NULL);
     networking_registerhandler(onion_c->net, NET_PACKET_ONION_DATA_RESPONSE, NULL, NULL);
-    oniondata_registerhandler(onion_c, ONION_DATA_FAKEID, NULL, NULL);
+    oniondata_registerhandler(onion_c, ONION_DATA_DHTPK, NULL, NULL);
     cryptopacket_registerhandler(onion_c->dht, CRYPTO_PACKET_FAKEID, NULL, NULL);
     tcp_onion_response_handler(onion_c->c, NULL, NULL);
     memset(onion_c, 0, sizeof(Onion_Client));

@@ -33,8 +33,8 @@
 #define ONION_NODE_TIMEOUT (ONION_NODE_PING_INTERVAL * 3)
 
 /* The interval in seconds at which to tell our friends where we are */
-#define ONION_FAKEID_INTERVAL 30
-#define DHT_FAKEID_INTERVAL 20
+#define ONION_DHTPK_SEND_INTERVAL 30
+#define DHT_DHTPK_SEND_INTERVAL 20
 
 #define NUMBER_ONION_PATHS 6
 
@@ -57,7 +57,7 @@
 
 /* Onion data packet ids. */
 #define ONION_DATA_FRIEND_REQ CRYPTO_PACKET_FRIEND_REQ
-#define ONION_DATA_FAKEID CRYPTO_PACKET_FAKEID
+#define ONION_DATA_DHTPK CRYPTO_PACKET_FAKEID
 
 typedef struct {
     uint8_t     public_key[crypto_box_PUBLICKEYBYTES];
