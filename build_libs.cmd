@@ -11,12 +11,12 @@ echo ^"GARBAGE^" is %GARBAGE%
 set vsc="%VS120COMNTOOLS%..\..\vc\bin"
 set msb="C:\Program Files (x86)\MSBuild\12.0\Bin\MSBuild.exe"
 
-%msb% toxcore\vs\toxcore.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Debug;GARBAGE=%GARBAGE%
-%msb% toxcore\vs\toxcore.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release;GARBAGE=%GARBAGE%
+%msb% toxcore\vs\toxcore.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Debug;GARBAGE=%GARBAGE%;SolutionDir=..\..\
+%msb% toxcore\vs\toxcore.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release;GARBAGE=%GARBAGE%;SolutionDir=..\..\
 
-%msb% opus\opus.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release;GARBAGE=%GARBAGE%
-%msb% libsodium\libsodium.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release;GARBAGE=%GARBAGE%
-%msb% libvpx\libvpx.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release;GARBAGE=%GARBAGE%
+%msb% opus\opus.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release;GARBAGE=%GARBAGE%;SolutionDir=..\
+%msb% libsodium\libsodium.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release;GARBAGE=%GARBAGE%;SolutionDir=..\
+%msb% libvpx\libvpx.vcxproj /fl1 /clp:ErrorsOnly /m:3 /t:Rebuild /p:Configuration=Release;GARBAGE=%GARBAGE%;SolutionDir=..\
 
 goto oka
 :novs120
