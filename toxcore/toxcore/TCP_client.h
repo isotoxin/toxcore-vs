@@ -35,7 +35,7 @@ typedef enum {
     TCP_PROXY_SOCKS5
 } TCP_PROXY_TYPE;
 
-typedef struct  {
+typedef struct {
     IP_Port ip_port;
     uint8_t proxy_type; // a value from TCP_PROXY_TYPE
 } TCP_Proxy_Info;

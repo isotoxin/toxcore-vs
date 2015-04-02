@@ -1016,19 +1016,19 @@ void Assoc_status(const Assoc *assoc)
                 total++;
 
                 LOGGER_TRACE("[%3i:%3i] %08x => [%s...] %i, %i(%c), %i(%c)\n",
-                            (int)bid, (int)cid, entry->hash, idpart2str(entry->client.client_id, 8),
-                            entry->used_at ? (int)(unix_time() - entry->used_at) : 0,
-                            entry->seen_at ? (int)(unix_time() - entry->seen_at) : 0,
-                            entry->seen_at ? (entry->seen_family == AF_INET ? '4' : (entry->seen_family == AF_INET6 ? '6' : '?')) : '?',
-                            entry->heard_at ? (int)(unix_time() - entry->heard_at) : 0,
-                            entry->heard_at ? (entry->heard_family == AF_INET ? '4' : (entry->heard_family == AF_INET6 ? '6' : '?')) : '?');
+                             (int)bid, (int)cid, entry->hash, idpart2str(entry->client.client_id, 8),
+                             entry->used_at ? (int)(unix_time() - entry->used_at) : 0,
+                             entry->seen_at ? (int)(unix_time() - entry->seen_at) : 0,
+                             entry->seen_at ? (entry->seen_family == AF_INET ? '4' : (entry->seen_family == AF_INET6 ? '6' : '?')) : '?',
+                             entry->heard_at ? (int)(unix_time() - entry->heard_at) : 0,
+                             entry->heard_at ? (entry->heard_family == AF_INET ? '4' : (entry->heard_family == AF_INET6 ? '6' : '?')) : '?');
             }
         }
     }
 
     if (total) {
         LOGGER_TRACE("Total: %i entries, table usage %i%%.\n", (int)total,
-                    (int)(total * 100 / (assoc->candidates_bucket_count * assoc->candidates_bucket_size)));
+                     (int)(total * 100 / (assoc->candidates_bucket_count * assoc->candidates_bucket_size)));
     }
 }
 

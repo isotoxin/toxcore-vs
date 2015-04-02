@@ -88,7 +88,7 @@ typedef struct {
   int col;
 } RefCntBuffer;
 
-typedef struct {
+typedef struct BufferPool {
   // Protect BufferPool from being accessed by several FrameWorkers at
   // the same time during frame parallel decode.
   // TODO(hkuang): Try to use atomic variable instead of locking the whole pool.
@@ -110,12 +110,7 @@ typedef struct {
 
 typedef struct VP9Common {
   struct vpx_internal_error_info  error;
-
-  DECLARE_ALIGNED(16, int16_t, y_dequant[QINDEX_RANGE][8]);
-  DECLARE_ALIGNED(16, int16_t, uv_dequant[QINDEX_RANGE][8]);
-
   vpx_color_space_t color_space;
-
   int width;
   int height;
   int display_width;

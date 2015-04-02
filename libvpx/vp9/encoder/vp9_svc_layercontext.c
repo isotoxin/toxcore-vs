@@ -91,8 +91,8 @@ void vp9_init_layer_context(VP9_COMP *const cpi) {
       if (oxcf->ss_enable_auto_arf[layer])
         lc->alt_ref_idx = alt_ref_idx++;
       else
-        lc->alt_ref_idx = -1;
-      lc->gold_ref_idx = -1;
+        lc->alt_ref_idx = INVALID_IDX;
+      lc->gold_ref_idx = INVALID_IDX;
     }
 
     lrc->buffer_level = oxcf->starting_buffer_level_ms *
@@ -380,13 +380,14 @@ int vp9_svc_start_frame(VP9_COMP *const cpi) {
     }
   }
 
-  if (vp9_set_size_literal(cpi, width, height) != 0)
-    return VPX_CODEC_INVALID_PARAM;
-
   cpi->oxcf.worst_allowed_q = vp9_quantizer_to_qindex(lc->max_q);
   cpi->oxcf.best_allowed_q = vp9_quantizer_to_qindex(lc->min_q);
 
   vp9_change_config(cpi, &cpi->oxcf);
+
+  if (vp9_set_size_literal(cpi, width, height) != 0)
+    return VPX_CODEC_INVALID_PARAM;
+
   vp9_set_high_precision_mv(cpi, 1);
 
   cpi->alt_ref_source = get_layer_context(cpi)->alt_ref_source;

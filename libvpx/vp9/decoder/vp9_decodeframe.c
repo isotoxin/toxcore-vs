@@ -181,14 +181,6 @@ static void read_mv_probs(nmv_context *ctx, int allow_hp, vp9_reader *r) {
   }
 }
 
-static void setup_plane_dequants(VP9_COMMON *cm, MACROBLOCKD *xd, int q_index) {
-  int i;
-  xd->plane[0].dequant = cm->y_dequant[q_index];
-
-  for (i = 1; i < MAX_MB_PLANE; i++)
-    xd->plane[i].dequant = cm->uv_dequant[q_index];
-}
-
 static void inverse_transform_block(MACROBLOCKD* xd, int plane, int block,
                                     TX_SIZE tx_size, uint8_t *dst, int stride,
                                     int eob) {
@@ -301,6 +293,8 @@ struct intra_args {
   MACROBLOCKD *xd;
   FRAME_COUNTS *counts;
   vp9_reader *r;
+  const int16_t *const y_dequant;
+  const int16_t *const uv_dequant;
 };
 
 static void predict_and_reconstruct_intra_block(int plane, int block,
@@ -313,6 +307,8 @@ static void predict_and_reconstruct_intra_block(int plane, int block,
   MODE_INFO *const mi = xd->mi[0].src_mi;
   const PREDICTION_MODE mode = (plane == 0) ? get_y_mode(mi, block)
                                             : mi->mbmi.uv_mode;
+  const int16_t *const dequant = (plane == 0) ? args->y_dequant
+                                              : args->uv_dequant;
   int x, y;
   uint8_t *dst;
   txfrm_block_to_raster_xy(plane_bsize, tx_size, block, &x, &y);
@@ -326,7 +322,7 @@ static void predict_and_reconstruct_intra_block(int plane, int block,
   if (!mi->mbmi.skip) {
     const int eob = vp9_decode_block_tokens(cm, xd, args->counts, plane, block,
                                             plane_bsize, x, y, tx_size,
-                                            args->r);
+                                            args->r, dequant);
     inverse_transform_block(xd, plane, block, tx_size, dst, pd->dst.stride,
                             eob);
   }
@@ -338,6 +334,8 @@ struct inter_args {
   vp9_reader *r;
   FRAME_COUNTS *counts;
   int *eobtotal;
+  const int16_t *const y_dequant;
+  const int16_t *const uv_dequant;
 };
 
 static void reconstruct_inter_block(int plane, int block,
@@ -347,10 +345,12 @@ static void reconstruct_inter_block(int plane, int block,
   VP9_COMMON *const cm = args->cm;
   MACROBLOCKD *const xd = args->xd;
   struct macroblockd_plane *const pd = &xd->plane[plane];
+  const int16_t *const dequant = (plane == 0) ? args->y_dequant
+                                              : args->uv_dequant;
   int x, y, eob;
   txfrm_block_to_raster_xy(plane_bsize, tx_size, block, &x, &y);
   eob = vp9_decode_block_tokens(cm, xd, args->counts, plane, block, plane_bsize,
-                                x, y, tx_size, args->r);
+                                x, y, tx_size, args->r, dequant);
   inverse_transform_block(xd, plane, block, tx_size,
                           &pd->dst.buf[4 * y * pd->dst.stride + 4 * x],
                           pd->dst.stride, eob);
@@ -393,6 +393,8 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
                          vp9_reader *r, BLOCK_SIZE bsize) {
   VP9_COMMON *const cm = &pbi->common;
   const int less8x8 = bsize < BLOCK_8X8;
+  int16_t y_dequant[2], uv_dequant[2];
+  int qindex = cm->base_qindex;
   MB_MODE_INFO *mbmi = set_offsets(cm, xd, tile, bsize, mi_row, mi_col);
   vp9_read_mode_info(pbi, xd, counts, tile, mi_row, mi_col, r);
 
@@ -401,14 +403,17 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
 
   if (mbmi->skip) {
     reset_skip_context(xd, bsize);
-  } else {
-    if (cm->seg.enabled)
-      setup_plane_dequants(cm, xd, vp9_get_qindex(&cm->seg, mbmi->segment_id,
-                                                  cm->base_qindex));
+  } else if (cm->seg.enabled) {
+    qindex = vp9_get_qindex(&cm->seg, mbmi->segment_id, cm->base_qindex);
   }
 
+  y_dequant[0] = vp9_dc_quant(qindex, cm->y_dc_delta_q, cm->bit_depth);
+  y_dequant[1] = vp9_ac_quant(qindex, 0, cm->bit_depth);
+  uv_dequant[0] = vp9_dc_quant(qindex, cm->uv_dc_delta_q, cm->bit_depth);
+  uv_dequant[1] = vp9_ac_quant(qindex, cm->uv_ac_delta_q, cm->bit_depth);
+
   if (!is_inter_block(mbmi)) {
-    struct intra_args arg = { cm, xd, counts, r };
+    struct intra_args arg = {cm, xd, counts, r , y_dequant, uv_dequant};
     vp9_foreach_transformed_block(xd, bsize,
                                   predict_and_reconstruct_intra_block, &arg);
   } else {
@@ -418,7 +423,8 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
     // Reconstruction
     if (!mbmi->skip) {
       int eobtotal = 0;
-      struct inter_args arg = { cm, xd, r, counts, &eobtotal };
+      struct inter_args arg = {cm, xd, r, counts, &eobtotal, y_dequant,
+                               uv_dequant};
       vp9_foreach_transformed_block(xd, bsize, reconstruct_inter_block, &arg);
       if (!less8x8 && eobtotal == 0)
         mbmi->skip = 1;  // skip loopfilter
@@ -627,25 +633,17 @@ static void setup_loopfilter(struct loopfilter *lf,
   }
 }
 
-static int read_delta_q(struct vp9_read_bit_buffer *rb, int *delta_q) {
-  const int old = *delta_q;
-  *delta_q = vp9_rb_read_bit(rb) ? vp9_rb_read_signed_literal(rb, 4) : 0;
-  return old != *delta_q;
+static INLINE int read_delta_q(struct vp9_read_bit_buffer *rb) {
+  return vp9_rb_read_bit(rb) ? vp9_rb_read_signed_literal(rb, 4) : 0;
 }
 
 static void setup_quantization(VP9_COMMON *const cm, MACROBLOCKD *const xd,
                                struct vp9_read_bit_buffer *rb) {
-  int update = 0;
-
   cm->base_qindex = vp9_rb_read_literal(rb, QINDEX_BITS);
-  update |= read_delta_q(rb, &cm->y_dc_delta_q);
-  update |= read_delta_q(rb, &cm->uv_dc_delta_q);
-  update |= read_delta_q(rb, &cm->uv_ac_delta_q);
-  if (update || cm->bit_depth != cm->dequant_bit_depth) {
-    vp9_init_dequantizer(cm);
-    cm->dequant_bit_depth = cm->bit_depth;
-  }
-
+  cm->y_dc_delta_q = read_delta_q(rb);
+  cm->uv_dc_delta_q = read_delta_q(rb);
+  cm->uv_ac_delta_q = read_delta_q(rb);
+  cm->dequant_bit_depth = cm->bit_depth;
   xd->lossless = cm->base_qindex == 0 &&
                  cm->y_dc_delta_q == 0 &&
                  cm->uv_dc_delta_q == 0 &&
@@ -743,6 +741,7 @@ static void setup_frame_size(VP9_COMMON *cm, struct vp9_read_bit_buffer *rb) {
   pool->frame_bufs[cm->new_fb_idx].buf.subsampling_x = cm->subsampling_x;
   pool->frame_bufs[cm->new_fb_idx].buf.subsampling_y = cm->subsampling_y;
   pool->frame_bufs[cm->new_fb_idx].buf.bit_depth = (unsigned int)cm->bit_depth;
+  pool->frame_bufs[cm->new_fb_idx].buf.color_space = cm->color_space;
 }
 
 static INLINE int valid_ref_frame_img_fmt(vpx_bit_depth_t ref_bit_depth,
@@ -823,6 +822,7 @@ static void setup_frame_size_with_refs(VP9_COMMON *cm,
   pool->frame_bufs[cm->new_fb_idx].buf.subsampling_x = cm->subsampling_x;
   pool->frame_bufs[cm->new_fb_idx].buf.subsampling_y = cm->subsampling_y;
   pool->frame_bufs[cm->new_fb_idx].buf.bit_depth = (unsigned int)cm->bit_depth;
+  pool->frame_bufs[cm->new_fb_idx].buf.color_space = cm->color_space;
 }
 
 static void setup_tile_info(VP9_COMMON *cm, struct vp9_read_bit_buffer *rb) {
@@ -934,7 +934,6 @@ static const uint8_t *decode_tiles(VP9Decoder *pbi,
     winterface->sync(&pbi->lf_worker);
     vp9_loop_filter_data_reset(lf_data, get_frame_new_buffer(cm), cm,
                                pbi->mb.plane);
-    vp9_loop_filter_frame_init(cm, cm->lf.filter_level);
   }
 
   assert(tile_rows <= 4);
@@ -1362,7 +1361,7 @@ static size_t read_uncompressed_header(VP9Decoder *pbi,
     pbi->refresh_frame_flags = (1 << REF_FRAMES) - 1;
 
     for (i = 0; i < REFS_PER_FRAME; ++i) {
-      cm->frame_refs[i].idx = -1;
+      cm->frame_refs[i].idx = INVALID_IDX;
       cm->frame_refs[i].buf = NULL;
     }
 
@@ -1432,14 +1431,13 @@ static size_t read_uncompressed_header(VP9Decoder *pbi,
                                           ref_buf->buf->y_crop_height,
                                           cm->width, cm->height);
 #endif
-        if (vp9_is_scaled(&ref_buf->sf))
-          vp9_extend_frame_borders(ref_buf->buf);
       }
     }
   }
 #if CONFIG_VP9_HIGHBITDEPTH
   get_frame_new_buffer(cm)->bit_depth = cm->bit_depth;
 #endif
+  get_frame_new_buffer(cm)->color_space = cm->color_space;
 
   if (pbi->need_resync) {
     vpx_internal_error(&cm->error, VPX_CODEC_CORRUPT_FRAME,
@@ -1552,18 +1550,6 @@ static int read_compressed_header(VP9Decoder *pbi, const uint8_t *data,
   return vp9_reader_has_error(&r);
 }
 
-void vp9_init_dequantizer(VP9_COMMON *cm) {
-  int q;
-
-  for (q = 0; q < QINDEX_RANGE; q++) {
-    cm->y_dequant[q][0] = vp9_dc_quant(q, cm->y_dc_delta_q, cm->bit_depth);
-    cm->y_dequant[q][1] = vp9_ac_quant(q, 0, cm->bit_depth);
-
-    cm->uv_dequant[q][0] = vp9_dc_quant(q, cm->uv_dc_delta_q, cm->bit_depth);
-    cm->uv_dequant[q][1] = vp9_ac_quant(q, cm->uv_ac_delta_q, cm->bit_depth);
-  }
-}
-
 #ifdef NDEBUG
 #define debug_check_frame_counts(cm) (void)0
 #else  // !NDEBUG
@@ -1654,7 +1640,6 @@ void vp9_decode_frame(VP9Decoder *pbi,
                            !cm->intra_only &&
                            cm->last_show_frame;
 
-  setup_plane_dequants(cm, xd, cm->base_qindex);
   vp9_setup_block_planes(xd, cm->subsampling_x, cm->subsampling_y);
 
   *cm->fc = cm->frame_contexts[cm->frame_context_idx];
@@ -1941,7 +1926,7 @@ void dec_build_inter_predictors(VP9Decoder *const pbi, MACROBLOCKD *xd,
       // pixels of each superblock row can be changed by next superblock row.
        if (pbi->frame_parallel_decode)
          vp9_frameworker_wait(pbi->frame_worker_owner, ref_frame_buf,
-                              (y1 + 7) << (plane == 0 ? 0 : 1));
+                              MAX(0, (y1 + 7) << (plane == 0 ? 0 : 1)));
 
       // Skip border extension if block is inside the frame.
       if (x0 < 0 || x0 > frame_width - 1 || x1 < 0 || x1 > frame_width - 1 ||
@@ -1997,7 +1982,7 @@ void dec_build_inter_predictors(VP9Decoder *const pbi, MACROBLOCKD *xd,
       // pixels of each superblock row can be changed by next superblock row.
        if (pbi->frame_parallel_decode)
          vp9_frameworker_wait(pbi->frame_worker_owner, ref_frame_buf,
-                              (y1 + 7) << (plane == 0 ? 0 : 1));
+                              MAX(0, (y1 + 7) << (plane == 0 ? 0 : 1)));
     }
 #if CONFIG_VP9_HIGHBITDEPTH
     if (xd->cur_buf->flags & YV12_FLAG_HIGHBITDEPTH) {

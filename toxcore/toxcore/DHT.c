@@ -78,8 +78,8 @@ int id_closest(const uint8_t *id, const uint8_t *id1, const uint8_t *id2)
 
     for (i = 0; i < CLIENT_ID_SIZE; ++i) {
 
-        distance1 = abs(((int8_t *)id)[i] ^ ((int8_t *)id1)[i]);
-        distance2 = abs(((int8_t *)id)[i] ^ ((int8_t *)id2)[i]);
+        distance1 = id[i] ^ id1[i];
+        distance2 = id[i] ^ id2[i];
 
         if (distance1 < distance2)
             return 1;
@@ -331,8 +331,8 @@ static int client_or_ip_port_in_list(Client_data *list, uint16_t length, const u
 
                 LOGGER_SCOPE( if (!ipport_equal(&list[i].assoc4.ip_port, &ip_port)) {
                 LOGGER_TRACE("coipil[%u]: switching ipv4 from %s:%u to %s:%u", i,
-                            ip_ntoa(&list[i].assoc4.ip_port.ip), ntohs(list[i].assoc4.ip_port.port),
-                            ip_ntoa(&ip_port.ip), ntohs(ip_port.port));
+                             ip_ntoa(&list[i].assoc4.ip_port.ip), ntohs(list[i].assoc4.ip_port.port),
+                             ip_ntoa(&ip_port.ip), ntohs(ip_port.port));
                 }
                             );
 
@@ -345,8 +345,8 @@ static int client_or_ip_port_in_list(Client_data *list, uint16_t length, const u
 
                 LOGGER_SCOPE( if (!ipport_equal(&list[i].assoc4.ip_port, &ip_port)) {
                 LOGGER_TRACE("coipil[%u]: switching ipv6 from %s:%u to %s:%u", i,
-                            ip_ntoa(&list[i].assoc6.ip_port.ip), ntohs(list[i].assoc6.ip_port.port),
-                            ip_ntoa(&ip_port.ip), ntohs(ip_port.port));
+                             ip_ntoa(&list[i].assoc6.ip_port.ip), ntohs(list[i].assoc6.ip_port.port),
+                             ip_ntoa(&ip_port.ip), ntohs(ip_port.port));
                 }
                             );
 

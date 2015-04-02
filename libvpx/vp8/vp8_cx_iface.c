@@ -861,9 +861,6 @@ static vpx_codec_err_t vp8e_encode(vpx_codec_alg_priv_t  *ctx,
     if (!ctx->cfg.rc_target_bitrate)
         return res;
 
-    if (!ctx->cfg.rc_target_bitrate)
-        return res;
-
     if (img)
         res = validate_img(ctx, img);
 
@@ -1330,10 +1327,8 @@ static vpx_codec_enc_cfg_map_t vp8e_usage_cfg_map[] =
         30,                 /* rc_resize_up_thresold */
 
         VPX_VBR,            /* rc_end_usage */
-#if VPX_ENCODER_ABI_VERSION > (1 + VPX_CODEC_ABI_VERSION)
         {0},                /* rc_twopass_stats_in */
         {0},                /* rc_firstpass_mb_stats_in */
-#endif
         256,                /* rc_target_bandwidth */
         4,                  /* rc_min_quantizer */
         63,                 /* rc_max_quantizer */
@@ -1353,9 +1348,6 @@ static vpx_codec_enc_cfg_map_t vp8e_usage_cfg_map[] =
         0,                  /* kf_min_dist */
         128,                /* kf_max_dist */
 
-#if VPX_ENCODER_ABI_VERSION == (1 + VPX_CODEC_ABI_VERSION)
-        "vp8.fpf"           /* first pass filename */
-#endif
         VPX_SS_DEFAULT_LAYERS, /* ss_number_layers */
         {0},
         {0},                /* ss_target_bitrate */
@@ -1386,12 +1378,13 @@ CODEC_INTERFACE(vpx_codec_vp8_cx) =
         NULL,    /* vpx_codec_get_si_fn_t     get_si; */
         NULL,    /* vpx_codec_decode_fn_t     decode; */
         NULL,    /* vpx_codec_frame_get_fn_t  frame_get; */
+        NULL,    /* vpx_codec_set_fb_fn_t     set_fb_fn; */
     },
     {
         1,                  /* 1 cfg map */
-        vp8e_usage_cfg_map, /* vpx_codec_enc_cfg_map_t    peek_si; */
+        vp8e_usage_cfg_map, /* vpx_codec_enc_cfg_map_t    cfg_maps; */
         vp8e_encode,        /* vpx_codec_encode_fn_t      encode; */
-        vp8e_get_cxdata,    /* vpx_codec_get_cx_data_fn_t   frame_get; */
+        vp8e_get_cxdata,    /* vpx_codec_get_cx_data_fn_t   get_cx_data; */
         vp8e_set_config,
         NULL,
         vp8e_get_preview,

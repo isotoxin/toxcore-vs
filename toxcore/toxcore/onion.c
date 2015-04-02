@@ -180,7 +180,6 @@ int create_onion_packet(uint8_t *packet, uint16_t max_packet_length, const Onion
     size_t sizeof_step1 = sizeof(uint8_t) * (SIZE_IPPORT + length); // -C99
     uint8_t* step1 = _alloca( sizeof_step1 ); // -C99
 
-
     ipport_pack(step1, &dest);
     memcpy(step1 + SIZE_IPPORT, data, length);
 
@@ -196,7 +195,7 @@ int create_onion_packet(uint8_t *packet, uint16_t max_packet_length, const Onion
     int len = encrypt_data_symmetric(path->shared_key3, nonce, step1, /*sizeof(step1)*/ sizeof_step1,
                                      step2 + SIZE_IPPORT + crypto_box_PUBLICKEYBYTES);
 
-    if ((uint32_t)len != SIZE_IPPORT + length + crypto_box_MACBYTES)
+    if (len != SIZE_IPPORT + length + crypto_box_MACBYTES)
         return -1;
 
     //uint8_t step3[SIZE_IPPORT + SEND_BASE * 2 + length]; // C99
@@ -207,7 +206,7 @@ int create_onion_packet(uint8_t *packet, uint16_t max_packet_length, const Onion
     len = encrypt_data_symmetric(path->shared_key2, nonce, step2, /*sizeof(step2)*/ sizeof_step2,
                                  step3 + SIZE_IPPORT + crypto_box_PUBLICKEYBYTES);
 
-    if ((uint32_t)len != SIZE_IPPORT + SEND_BASE + length + crypto_box_MACBYTES)
+    if (len != SIZE_IPPORT + SEND_BASE + length + crypto_box_MACBYTES)
         return -1;
 
     packet[0] = NET_PACKET_ONION_SEND_INITIAL;
@@ -217,7 +216,7 @@ int create_onion_packet(uint8_t *packet, uint16_t max_packet_length, const Onion
     len = encrypt_data_symmetric(path->shared_key1, nonce, step3, /*sizeof(step3)*/ sizeof_step3,
                                  packet + 1 + crypto_box_NONCEBYTES + crypto_box_PUBLICKEYBYTES);
 
-    if ((uint32_t)len != SIZE_IPPORT + SEND_BASE * 2 + length + crypto_box_MACBYTES)
+    if (len != SIZE_IPPORT + SEND_BASE * 2 + length + crypto_box_MACBYTES)
         return -1;
 
     return 1 + crypto_box_NONCEBYTES + crypto_box_PUBLICKEYBYTES + len;
@@ -242,7 +241,6 @@ int create_onion_packet_tcp(uint8_t *packet, uint16_t max_packet_length, const O
     size_t sizeof_step1 = sizeof(uint8_t) * (SIZE_IPPORT + length); // -C99
     uint8_t* step1 = _alloca( sizeof_step1 ); // -C99
 
-
     ipport_pack(step1, &dest);
     memcpy(step1 + SIZE_IPPORT, data, length);
 
@@ -258,7 +256,7 @@ int create_onion_packet_tcp(uint8_t *packet, uint16_t max_packet_length, const O
     int len = encrypt_data_symmetric(path->shared_key3, nonce, step1, /*sizeof(step1)*/ sizeof_step1,
                                      step2 + SIZE_IPPORT + crypto_box_PUBLICKEYBYTES);
 
-    if ((uint32_t)len != SIZE_IPPORT + length + crypto_box_MACBYTES)
+    if (len != SIZE_IPPORT + length + crypto_box_MACBYTES)
         return -1;
 
     ipport_pack(packet + crypto_box_NONCEBYTES, &path->ip_port2);
@@ -266,7 +264,7 @@ int create_onion_packet_tcp(uint8_t *packet, uint16_t max_packet_length, const O
     len = encrypt_data_symmetric(path->shared_key2, nonce, step2, /*sizeof(step2)*/ sizeof_step2,
                                  packet + crypto_box_NONCEBYTES + SIZE_IPPORT + crypto_box_PUBLICKEYBYTES);
 
-    if ((uint32_t)len != SIZE_IPPORT + SEND_BASE + length + crypto_box_MACBYTES)
+    if (len != SIZE_IPPORT + SEND_BASE + length + crypto_box_MACBYTES)
         return -1;
 
     memcpy(packet, nonce, crypto_box_NONCEBYTES);
