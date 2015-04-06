@@ -4,8 +4,8 @@ SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 if "aa%VS120COMNTOOLS%" == "aa" goto novs120
 if NOT "aa%GARBAGE%" == "aa" goto garbok
 echo warning: no ^"GARBAGE^" variable defined (path to temp compile files, must not be inside %TEMP%)
-set GARBAGE=%cd%\~garbage
-md %GARBAGE%
+set GARBAGE="%cd%\~garbage"
+if not exist %GARBAGE% md %GARBAGE%
 :garbok
 echo ^"GARBAGE^" is %GARBAGE%
 set vsc="%VS120COMNTOOLS%..\..\vc\bin"
