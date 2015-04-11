@@ -1197,7 +1197,7 @@ static void do_TCP_epoll(TCP_Server *TCP_server)
 
         for (n = 0; n < nfds; ++n) {
             sock_t sock = events[n].data.u64 & 0xFFFFFFFF;
-            int status = (events[n].data.u64 >> 32) & 0xFFFF, index = (events[n].data.u64 >> 48);
+            int status = (events[n].data.u64 >> 32) & 0xFF, index = (events[n].data.u64 >> 40);
 
             if ((events[n].events & EPOLLERR) || (events[n].events & EPOLLHUP) || (events[n].events & EPOLLRDHUP)) {
                 switch (status) {
@@ -1251,7 +1251,7 @@ static void do_TCP_epoll(TCP_Server *TCP_server)
 
                         struct epoll_event ev = {
                             .events = EPOLLIN | EPOLLET | EPOLLRDHUP,
-                            .data.u64 = sock_new | ((uint64_t)TCP_SOCKET_INCOMING << 32) | ((uint64_t)index_new << 48)
+                            .data.u64 = sock_new | ((uint64_t)TCP_SOCKET_INCOMING << 32) | ((uint64_t)index_new << 40)
                         };
 
                         if (epoll_ctl(TCP_server->efd, EPOLL_CTL_ADD, sock_new, &ev) == -1) {
@@ -1268,7 +1268,7 @@ static void do_TCP_epoll(TCP_Server *TCP_server)
 
                     if ((index_new = do_incoming(TCP_server, index)) != -1) {
                         events[n].events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-                        events[n].data.u64 = sock | ((uint64_t)TCP_SOCKET_UNCONFIRMED << 32) | ((uint64_t)index_new << 48);
+                        events[n].data.u64 = sock | ((uint64_t)TCP_SOCKET_UNCONFIRMED << 32) | ((uint64_t)index_new << 40);
 
                         if (epoll_ctl(TCP_server->efd, EPOLL_CTL_MOD, sock, &events[n]) == -1) {
                             kill_TCP_connection(&TCP_server->unconfirmed_connection_queue[index_new]);
@@ -1284,7 +1284,7 @@ static void do_TCP_epoll(TCP_Server *TCP_server)
 
                     if ((index_new = do_unconfirmed(TCP_server, index)) != -1) {
                         events[n].events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-                        events[n].data.u64 = sock | ((uint64_t)TCP_SOCKET_CONFIRMED << 32) | ((uint64_t)index_new << 48);
+                        events[n].data.u64 = sock | ((uint64_t)TCP_SOCKET_CONFIRMED << 32) | ((uint64_t)index_new << 40);
 
                         if (epoll_ctl(TCP_server->efd, EPOLL_CTL_MOD, sock, &events[n]) == -1) {
                             //remove from confirmed connections

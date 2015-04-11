@@ -881,7 +881,8 @@ typedef enum TOX_ERR_FRIEND_ADD {
  * friends. Once added, a friend number is stable for the lifetime of the Tox
  * object. After saving the state and reloading it, the friend numbers may not
  * be the same as before. Deleting a friend creates a gap in the friend number
- * set, which is filled by the next adding of a friend.
+ * set, which is filled by the next adding of a friend. Any pattern in friend
+ * numbers should not be relied on.
  *
  * If more than INT32_MAX friends are added, this function causes undefined
  * behaviour.
@@ -995,6 +996,21 @@ bool tox_friend_get_public_key(const Tox *tox, uint32_t friend_number, uint8_t *
  */
 bool tox_friend_exists(const Tox *tox, uint32_t friend_number);
 
+typedef enum TOX_ERR_FRIEND_GET_LAST_ONLINE {
+    TOX_ERR_FRIEND_GET_LAST_ONLINE_OK,
+    /**
+     * No friend with the given number exists on the friend list.
+     */
+    TOX_ERR_FRIEND_GET_LAST_ONLINE_FRIEND_NOT_FOUND,
+} TOX_ERR_FRIEND_GET_LAST_ONLINE;
+
+/**
+ * Return a unix-time timestamp of the last time the friend associated with a given
+ * friend number was seen online. This function will return UINT64_MAX on error.
+ *
+ * @param friend_number The friend number you want to query.
+ */
+uint64_t tox_friend_get_last_online(const Tox *tox, uint32_t friend_number, TOX_ERR_FRIEND_GET_LAST_ONLINE *error);
 
 /**
  * Return the number of friends on the friend list.
@@ -1660,7 +1676,8 @@ typedef enum TOX_ERR_FILE_SEND {
  *
  * @return A file number used as an identifier in subsequent callbacks. This
  *   number is per friend. File numbers are reused after a transfer terminates.
- *   on failure, this function returns UINT32_MAX.
+ *   on failure, this function returns UINT32_MAX. Any pattern in file numbers
+ *   should not be relied on.
  */
 uint32_t tox_file_send(Tox *tox, uint32_t friend_number, uint32_t kind, uint64_t file_size, const uint8_t *file_id,
                        const uint8_t *filename, size_t filename_length, TOX_ERR_FILE_SEND *error);
