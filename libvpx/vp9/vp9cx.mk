@@ -34,6 +34,7 @@ VP9_CX_SRCS-yes += encoder/vp9_encodemv.c
 VP9_CX_SRCS-yes += encoder/vp9_ethread.h
 VP9_CX_SRCS-yes += encoder/vp9_ethread.c
 VP9_CX_SRCS-yes += encoder/vp9_extend.c
+VP9_CX_SRCS-$(CONFIG_INTERNAL_STATS) += encoder/vp9_fastssim.c
 VP9_CX_SRCS-yes += encoder/vp9_firstpass.c
 VP9_CX_SRCS-yes += encoder/vp9_block.h
 VP9_CX_SRCS-yes += encoder/vp9_writer.h
@@ -62,6 +63,7 @@ VP9_CX_SRCS-yes += encoder/vp9_mcomp.c
 VP9_CX_SRCS-yes += encoder/vp9_encoder.c
 VP9_CX_SRCS-yes += encoder/vp9_picklpf.c
 VP9_CX_SRCS-yes += encoder/vp9_picklpf.h
+VP9_CX_SRCS-$(CONFIG_INTERNAL_STATS) += encoder/vp9_psnrhvs.c
 VP9_CX_SRCS-yes += encoder/vp9_quantize.c
 VP9_CX_SRCS-yes += encoder/vp9_ratectrl.c
 VP9_CX_SRCS-yes += encoder/vp9_rd.c
@@ -79,6 +81,8 @@ VP9_CX_SRCS-yes += encoder/vp9_resize.c
 VP9_CX_SRCS-yes += encoder/vp9_resize.h
 VP9_CX_SRCS-$(CONFIG_INTERNAL_STATS) += encoder/vp9_ssim.c
 VP9_CX_SRCS-$(CONFIG_INTERNAL_STATS) += encoder/vp9_ssim.h
+VP9_CX_SRCS-$(CONFIG_INTERNAL_STATS) += encoder/vp9_blockiness.c
+
 VP9_CX_SRCS-yes += encoder/vp9_tokenize.c
 VP9_CX_SRCS-yes += encoder/vp9_treewriter.c
 VP9_CX_SRCS-yes += encoder/vp9_variance.c
@@ -152,12 +156,14 @@ VP9_CX_SRCS-$(HAVE_AVX2) += encoder/x86/vp9_dct_avx2.c
 VP9_CX_SRCS-$(HAVE_AVX2) += encoder/x86/vp9_error_intrin_avx2.c
 VP9_CX_SRCS-$(HAVE_AVX2) += encoder/x86/vp9_variance_avx2.c
 
-VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_avg_neon.c
-VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_sad_neon.c
-VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_sad4d_neon.c
+ifneq ($(CONFIG_VP9_HIGHBITDEPTH),yes)
 VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_dct_neon.c
-VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_variance_neon.c
+endif
+VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_avg_neon.c
 VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_quantize_neon.c
+VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_sad4d_neon.c
+VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_sad_neon.c
 VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_subtract_neon.c
+VP9_CX_SRCS-$(HAVE_NEON) += encoder/arm/neon/vp9_variance_neon.c
 
 VP9_CX_SRCS-yes := $(filter-out $(VP9_CX_SRCS_REMOVE-yes),$(VP9_CX_SRCS-yes))

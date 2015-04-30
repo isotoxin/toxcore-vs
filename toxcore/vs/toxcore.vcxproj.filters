@@ -94,6 +94,9 @@
     <ClCompile Include="..\toxdns\toxdns.c">
       <Filter>dns</Filter>
     </ClCompile>
+    <ClCompile Include="..\toxcore\TCP_connection.c">
+      <Filter>core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\toxcore\assoc.h">
@@ -184,6 +187,9 @@
     <ClInclude Include="unistd.h" />
     <ClInclude Include="..\toxdns\toxdns.h">
       <Filter>dns</Filter>
+    </ClInclude>
+    <ClInclude Include="..\toxcore\TCP_connection.h">
+      <Filter>core</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

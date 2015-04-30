@@ -358,7 +358,7 @@ static void first_pass_motion_search(VP9_COMP *cpi, MACROBLOCK *x,
   MV tmp_mv = {0, 0};
   MV ref_mv_full = {ref_mv->row >> 3, ref_mv->col >> 3};
   int num00, tmp_err, n;
-  const BLOCK_SIZE bsize = xd->mi[0].src_mi->mbmi.sb_type;
+  const BLOCK_SIZE bsize = xd->mi[0]->mbmi.sb_type;
   vp9_variance_fn_ptr_t v_fn_ptr = cpi->fn_ptr[bsize];
   const int new_mv_mode_penalty = NEW_MV_MODE_PENALTY;
 
@@ -567,8 +567,8 @@ void vp9_first_pass(VP9_COMP *cpi, const struct lookahead_entry *source) {
     vp9_setup_pre_planes(xd, 0, first_ref_buf, 0, 0, NULL);
   }
 
-  xd->mi = cm->mi;
-  xd->mi[0].src_mi = &xd->mi[0];
+  xd->mi = cm->mi_grid_visible;
+  xd->mi[0] = cm->mi;
 
   vp9_frame_init_quantizer(cpi);
 
@@ -621,8 +621,8 @@ void vp9_first_pass(VP9_COMP *cpi, const struct lookahead_entry *source) {
       xd->plane[1].dst.buf = new_yv12->u_buffer + recon_uvoffset;
       xd->plane[2].dst.buf = new_yv12->v_buffer + recon_uvoffset;
       xd->left_available = (mb_col != 0);
-      xd->mi[0].src_mi->mbmi.sb_type = bsize;
-      xd->mi[0].src_mi->mbmi.ref_frame[0] = INTRA_FRAME;
+      xd->mi[0]->mbmi.sb_type = bsize;
+      xd->mi[0]->mbmi.ref_frame[0] = INTRA_FRAME;
       set_mi_row_col(xd, &tile,
                      mb_row << 1, num_8x8_blocks_high_lookup[bsize],
                      mb_col << 1, num_8x8_blocks_wide_lookup[bsize],
@@ -630,8 +630,8 @@ void vp9_first_pass(VP9_COMP *cpi, const struct lookahead_entry *source) {
 
       // Do intra 16x16 prediction.
       x->skip_encode = 0;
-      xd->mi[0].src_mi->mbmi.mode = DC_PRED;
-      xd->mi[0].src_mi->mbmi.tx_size = use_dc_pred ?
+      xd->mi[0]->mbmi.mode = DC_PRED;
+      xd->mi[0]->mbmi.tx_size = use_dc_pred ?
          (bsize >= BLOCK_16X16 ? TX_16X16 : TX_8X8) : TX_4X4;
       vp9_encode_intra_block_plane(x, bsize, 0);
       this_error = vp9_get_mb_ss(x->plane[0].src_diff);
@@ -843,11 +843,11 @@ void vp9_first_pass(VP9_COMP *cpi, const struct lookahead_entry *source) {
           mv.row *= 8;
           mv.col *= 8;
           this_error = motion_error;
-          xd->mi[0].src_mi->mbmi.mode = NEWMV;
-          xd->mi[0].src_mi->mbmi.mv[0].as_mv = mv;
-          xd->mi[0].src_mi->mbmi.tx_size = TX_4X4;
-          xd->mi[0].src_mi->mbmi.ref_frame[0] = LAST_FRAME;
-          xd->mi[0].src_mi->mbmi.ref_frame[1] = NONE;
+          xd->mi[0]->mbmi.mode = NEWMV;
+          xd->mi[0]->mbmi.mv[0].as_mv = mv;
+          xd->mi[0]->mbmi.tx_size = TX_4X4;
+          xd->mi[0]->mbmi.ref_frame[0] = LAST_FRAME;
+          xd->mi[0]->mbmi.ref_frame[1] = NONE;
           vp9_build_inter_predictors_sby(xd, mb_row << 1, mb_col << 1, bsize);
           vp9_encode_sby_pass1(x, bsize);
           sum_mvr += mv.row;
@@ -1852,6 +1852,8 @@ static void define_gf_group(VP9_COMP *cpi, FIRSTPASS_STATS *this_frame) {
       active_max_gf_interval = 12 + MIN(4, (int_lbq / 6));
       if (active_max_gf_interval > rc->max_gf_interval)
         active_max_gf_interval = rc->max_gf_interval;
+      if (active_max_gf_interval < active_min_gf_interval)
+        active_max_gf_interval = active_min_gf_interval;
     }
   }
 
@@ -2047,29 +2049,61 @@ static void define_gf_group(VP9_COMP *cpi, FIRSTPASS_STATS *this_frame) {
   }
 }
 
-// TODO(PGW) Re-examine the use of II ration in this code in the light of#
-// changes elsewhere
+// Threshold for use of the lagging second reference frame. High second ref
+// usage may point to a transient event like a flash or occlusion rather than
+// a real scene cut.
+#define SECOND_REF_USEAGE_THRESH 0.1
+// Minimum % intra coding observed in first pass (1.0 = 100%)
+#define MIN_INTRA_LEVEL 0.25
+// Minimum ratio between the % of intra coding and inter coding in the first
+// pass after discounting neutral blocks (discounting neutral blocks in this
+// way helps catch scene cuts in clips with very flat areas or letter box
+// format clips with image padding.
+#define INTRA_VS_INTER_THRESH 2.0
+// Hard threshold where the first pass chooses intra for almost all blocks.
+// In such a case even if the frame is not a scene cut coding a key frame
+// may be a good option.
+#define VERY_LOW_INTER_THRESH 0.05
+// Maximum threshold for the relative ratio of intra error score vs best
+// inter error score.
+#define KF_II_ERR_THRESHOLD 2.5
+// In real scene cuts there is almost always a sharp change in the intra
+// or inter error score.
+#define ERR_CHANGE_THRESHOLD 0.4
+// For real scene cuts we expect an improvment in the intra inter error
+// ratio in the next frame.
+#define II_IMPROVEMENT_THRESHOLD 3.5
 #define KF_II_MAX 128.0
+
 static int test_candidate_kf(TWO_PASS *twopass,
                              const FIRSTPASS_STATS *last_frame,
                              const FIRSTPASS_STATS *this_frame,
                              const FIRSTPASS_STATS *next_frame) {
   int is_viable_kf = 0;
+  double pcnt_intra = 1.0 - this_frame->pcnt_inter;
+  double modified_pcnt_inter =
+    this_frame->pcnt_inter - this_frame->pcnt_neutral;
 
   // Does the frame satisfy the primary criteria of a key frame?
+  // See above for an explanation of the test criteria.
   // If so, then examine how well it predicts subsequent frames.
-  if ((this_frame->pcnt_second_ref < 0.10) &&
-      (next_frame->pcnt_second_ref < 0.10) &&
-      ((this_frame->pcnt_inter < 0.05) ||
-       (((this_frame->pcnt_inter - this_frame->pcnt_neutral) < 0.35) &&
+  if ((this_frame->pcnt_second_ref < SECOND_REF_USEAGE_THRESH) &&
+      (next_frame->pcnt_second_ref < SECOND_REF_USEAGE_THRESH) &&
+      ((this_frame->pcnt_inter < VERY_LOW_INTER_THRESH) ||
+       ((pcnt_intra > MIN_INTRA_LEVEL) &&
+        (pcnt_intra > (INTRA_VS_INTER_THRESH * modified_pcnt_inter)) &&
         ((this_frame->intra_error /
-          DOUBLE_DIVIDE_CHECK(this_frame->coded_error)) < 2.5) &&
+          DOUBLE_DIVIDE_CHECK(this_frame->coded_error)) <
+          KF_II_ERR_THRESHOLD) &&
         ((fabs(last_frame->coded_error - this_frame->coded_error) /
-              DOUBLE_DIVIDE_CHECK(this_frame->coded_error) > 0.40) ||
+          DOUBLE_DIVIDE_CHECK(this_frame->coded_error) >
+          ERR_CHANGE_THRESHOLD) ||
          (fabs(last_frame->intra_error - this_frame->intra_error) /
-              DOUBLE_DIVIDE_CHECK(this_frame->intra_error) > 0.40) ||
+          DOUBLE_DIVIDE_CHECK(this_frame->intra_error) >
+          ERR_CHANGE_THRESHOLD) ||
          ((next_frame->intra_error /
-           DOUBLE_DIVIDE_CHECK(next_frame->coded_error)) > 3.5))))) {
+          DOUBLE_DIVIDE_CHECK(next_frame->coded_error)) >
+          II_IMPROVEMENT_THRESHOLD))))) {
     int i;
     const FIRSTPASS_STATS *start_pos = twopass->stats_in;
     FIRSTPASS_STATS local_next_frame = *next_frame;
@@ -2612,6 +2646,7 @@ void vp9_rc_get_second_pass_params(VP9_COMP *cpi) {
 }
 
 #define MINQ_ADJ_LIMIT 48
+#define MINQ_ADJ_LIMIT_CQ 20
 void vp9_twopass_postencode_update(VP9_COMP *cpi) {
   TWO_PASS *const twopass = &cpi->twopass;
   RATE_CONTROL *const rc = &cpi->rc;
@@ -2651,7 +2686,7 @@ void vp9_twopass_postencode_update(VP9_COMP *cpi) {
     const int maxq_adj_limit =
       rc->worst_quality - twopass->active_worst_quality;
     const int minq_adj_limit =
-      (cpi->oxcf.rc_mode == VPX_CQ) ? 0 : MINQ_ADJ_LIMIT;
+        (cpi->oxcf.rc_mode == VPX_CQ ? MINQ_ADJ_LIMIT_CQ : MINQ_ADJ_LIMIT);
 
     // Undershoot.
     if (rc->rate_error_estimate > cpi->oxcf.under_shoot_pct) {

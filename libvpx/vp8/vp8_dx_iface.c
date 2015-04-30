@@ -11,7 +11,8 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "vp8_rtcd.h"
+#include "./vp8_rtcd.h"
+#include "./vpx_scale_rtcd.h"
 #include "vpx/vpx_decoder.h"
 #include "vpx/vp8dx.h"
 #include "vpx/internal/vpx_codec_internal.h"
@@ -106,6 +107,7 @@ static vpx_codec_err_t vp8_init(vpx_codec_ctx_t *ctx,
     (void) data;
 
     vp8_rtcd();
+    vpx_scale_rtcd();
 
     /* This function only allocates space for the vpx_codec_alg_priv_t
      * structure. More memory may be required at the time the stream
@@ -402,7 +404,7 @@ static vpx_codec_err_t vp8_decode(vpx_codec_alg_priv_t  *ctx,
     if (!res)
     {
         VP8D_COMP *pbi = ctx->yv12_frame_buffers.pbi[0];
-        if(resolution_change)
+        if (resolution_change)
         {
             VP8_COMMON *const pc = & pbi->common;
             MACROBLOCKD *const xd  = & pbi->mb;
