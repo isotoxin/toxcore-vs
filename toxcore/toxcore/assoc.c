@@ -620,9 +620,7 @@ uint8_t Assoc_get_close_entries(Assoc *assoc, Assoc_close_entries *state)
         state->distance_absolute_func = id_distance;
 
     size_t dist_list_len = assoc->candidates_bucket_count * assoc->candidates_bucket_size;
-    //uint64_t dist_list[dist_list_len]; // C99
-    size_t sizeof_dist_list = sizeof(uint64_t) * (dist_list_len); // -C99
-    uint64_t* dist_list = _alloca( sizeof_dist_list ); // -C99
+    DYNAMIC( uint64_t, dist_list, dist_list_len ); // -C99
     memset(dist_list, ~0, dist_list_len * sizeof(dist_list[0]));
     bucket_t b;
     size_t i;

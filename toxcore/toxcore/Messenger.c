@@ -484,9 +484,7 @@ int m_send_message_generic(Messenger *m, int32_t friendnumber, uint8_t type, con
     if (m->friendlist[friendnumber].status != FRIEND_ONLINE)
         return -3;
 
-    //uint8_t packet[length + 1]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (length + 1); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, length + 1 ); // -C99
     packet[0] = type + PACKET_ID_MESSAGE;
 
     if (length != 0)
@@ -917,9 +915,7 @@ static int write_cryptpacket_id(const Messenger *m, int32_t friendnumber, uint8_
     if (length >= MAX_CRYPTO_DATA_SIZE || m->friendlist[friendnumber].status != FRIEND_ONLINE)
         return 0;
 
-    //uint8_t packet[length + 1]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (length + 1); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, length + 1 ); // -C99
     packet[0] = packet_id;
 
     if (length != 0)
@@ -1063,9 +1059,7 @@ static int file_sendrequest(const Messenger *m, int32_t friendnumber, uint8_t fi
     if (filename_length > MAX_FILENAME_LENGTH)
         return 0;
 
-    //uint8_t packet[1 + sizeof(file_type) + sizeof(filesize) + FILE_ID_LENGTH + filename_length]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (1 + sizeof(file_type) + sizeof(filesize) + FILE_ID_LENGTH + filename_length); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, 1 + sizeof(file_type) + sizeof(filesize) + FILE_ID_LENGTH + filename_length ); // -C99
     packet[0] = filenumber;
     file_type = htonl(file_type);
     memcpy(packet + 1, &file_type, sizeof(file_type));
@@ -1077,7 +1071,7 @@ static int file_sendrequest(const Messenger *m, int32_t friendnumber, uint8_t fi
         memcpy(packet + 1 + sizeof(file_type) + sizeof(filesize) + FILE_ID_LENGTH, filename, filename_length);
     }
 
-    return write_cryptpacket_id(m, friendnumber, PACKET_ID_FILE_SENDREQUEST, packet, /*sizeof(packet)*/ sizeof_packet, 0);
+    return write_cryptpacket_id(m, friendnumber, PACKET_ID_FILE_SENDREQUEST, packet, sizeOf(packet), 0);
 }
 
 /* Send a file send request.
@@ -1131,9 +1125,7 @@ int send_file_control_packet(const Messenger *m, int32_t friendnumber, uint8_t s
     if (1 + 3 + data_length > MAX_CRYPTO_DATA_SIZE)
         return -1;
 
-    //uint8_t packet[3 + data_length]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (3 + data_length); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, 3 + data_length ); // -C99
 
     packet[0] = send_receive;
     packet[1] = filenumber;
@@ -1143,7 +1135,7 @@ int send_file_control_packet(const Messenger *m, int32_t friendnumber, uint8_t s
         memcpy(packet + 3, data, data_length);
     }
 
-    return write_cryptpacket_id(m, friendnumber, PACKET_ID_FILE_CONTROL, packet, /*sizeof(packet)*/ sizeof_packet, 0);
+    return write_cryptpacket_id(m, friendnumber, PACKET_ID_FILE_CONTROL, packet, sizeOf(packet), 0);
 }
 
 /* Send a file control request.
@@ -1314,9 +1306,7 @@ static int64_t send_file_data_packet(const Messenger *m, int32_t friendnumber, u
     if (friend_not_valid(m, friendnumber))
         return -1;
 
-    //uint8_t packet[2 + length]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (2 + length); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, 2 + length ); // -C99
     packet[0] = PACKET_ID_FILE_DATA;
     packet[1] = filenumber;
 
@@ -1325,7 +1315,7 @@ static int64_t send_file_data_packet(const Messenger *m, int32_t friendnumber, u
     }
 
     return write_cryptpacket(m->net_crypto, friend_connection_crypt_connection_id(m->fr_c,
-                             m->friendlist[friendnumber].friendcon_id), packet, /*sizeof(packet)*/ sizeof_packet, 1);
+                             m->friendlist[friendnumber].friendcon_id), packet, sizeOf(packet), 1);
 }
 
 #define MAX_FILE_DATA_SIZE (MAX_CRYPTO_DATA_SIZE - 2)
@@ -1945,9 +1935,7 @@ static int handle_packet(void *object, int i, uint8_t *temp, uint16_t len)
                 break;
 
             /* Make sure the NULL terminator is present. */
-            //uint8_t data_terminated[data_length + 1]; // C99
-            size_t sizeof_data_terminated = sizeof(uint8_t) * (data_length + 1); // -C99
-            uint8_t* data_terminated = _alloca( sizeof_data_terminated ); // -C99
+            DYNAMIC( uint8_t, data_terminated, data_length + 1 ); // -C99
             memcpy(data_terminated, data, data_length);
             data_terminated[data_length] = 0;
 
@@ -1966,9 +1954,7 @@ static int handle_packet(void *object, int i, uint8_t *temp, uint16_t len)
                 break;
 
             /* Make sure the NULL terminator is present. */
-            //uint8_t data_terminated[data_length + 1]; // C99
-            size_t sizeof_data_terminated = sizeof(uint8_t) * (data_length + 1); // -C99
-            uint8_t* data_terminated = _alloca( sizeof_data_terminated ); // -C99
+            DYNAMIC( uint8_t, data_terminated, data_length + 1 ); // -C99
             memcpy(data_terminated, data, data_length);
             data_terminated[data_length] = 0;
 
@@ -2019,9 +2005,7 @@ static int handle_packet(void *object, int i, uint8_t *temp, uint16_t len)
             uint16_t message_length = data_length;
 
             /* Make sure the NULL terminator is present. */
-            //uint8_t message_terminated[message_length + 1]; // C99
-            size_t sizeof_message_terminated = sizeof(uint8_t) * (message_length + 1); // -C99
-            uint8_t* message_terminated = _alloca( sizeof_message_terminated ); // -C99
+            DYNAMIC( uint8_t, message_terminated, message_length + 1 ); // -C99
             memcpy(message_terminated, message, message_length);
             message_terminated[message_length] = 0;
             uint8_t type = packet_id - PACKET_ID_MESSAGE;
@@ -2076,9 +2060,7 @@ static int handle_packet(void *object, int i, uint8_t *temp, uint16_t len)
             ft->paused = FILE_PAUSE_NOT;
             memcpy(ft->id, data + 1 + sizeof(uint32_t) + sizeof(uint64_t), FILE_ID_LENGTH);
 
-            //uint8_t filename_terminated[filename_length + 1]; // C99
-            size_t sizeof_filename_terminated = sizeof(uint8_t) * (filename_length + 1); // -C99
-            uint8_t* filename_terminated = _alloca( sizeof_filename_terminated ); // -C99
+            DYNAMIC( uint8_t, filename_terminated, filename_length + 1 ); // -C99
             uint8_t *filename = NULL;
 
             if (filename_length) {

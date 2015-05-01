@@ -267,9 +267,8 @@ static uint32_t set_path_timeouts(Onion_Client *onion_c, uint32_t num, uint32_t 
         onion_paths->last_path_success[path_num % NUMBER_ONION_PATHS] = unix_time();
         onion_paths->last_path_used_times[path_num % NUMBER_ONION_PATHS] = 0;
 
-        //unsigned int path_len = 3;
-#define path_len 3
-        Node_format nodes[path_len];
+        unsigned int path_len = 3;
+        Node_format nodes[3 /*path_len*/];
 
         if (onion_path_to_nodes(nodes, path_len, &onion_paths->paths[path_num % NUMBER_ONION_PATHS]) == 0) {
             unsigned int i;
@@ -607,9 +606,7 @@ static int handle_announce_response(void *object, IP_Port source, const uint8_t 
     if (num > onion_c->num_friends)
         return 1;
 
-    //uint8_t plain[1 + ONION_PING_ID_SIZE + len_nodes]; // C99
-    size_t sizeof_plain = sizeof(uint8_t) * (1 + ONION_PING_ID_SIZE + len_nodes); // -C99
-    uint8_t* plain = _alloca( sizeof_plain ); // -C99
+    DYNAMIC( uint8_t, plain, 1 + ONION_PING_ID_SIZE + len_nodes ); // -C99
     int len = -1;
 
     if (num == 0) {
@@ -626,7 +623,7 @@ static int handle_announce_response(void *object, IP_Port source, const uint8_t 
                            length - (1 + ONION_ANNOUNCE_SENDBACK_DATA_LENGTH + crypto_box_NONCEBYTES), plain);
     }
 
-    if ((uint32_t)len != /*sizeof(plain)*/ sizeof_plain)
+    if ((uint32_t)len != sizeOf(plain))
         return 1;
 
     if (client_add_to_list(onion_c, num, public_key, ip_port, plain[0], plain + 1, path_num) == -1)
@@ -660,30 +657,26 @@ static int handle_data_response(void *object, IP_Port source, const uint8_t *pac
     if (length > MAX_DATA_REQUEST_SIZE)
         return 1;
 
-    //uint8_t temp_plain[length - ONION_DATA_RESPONSE_MIN_SIZE]; // C99
-    size_t sizeof_temp_plain = sizeof(uint8_t) * (length - ONION_DATA_RESPONSE_MIN_SIZE); // -C99
-    uint8_t* temp_plain = _alloca( sizeof_temp_plain ); // -C99
+    DYNAMIC( uint8_t, temp_plain, length - ONION_DATA_RESPONSE_MIN_SIZE ); // -C99
     int len = decrypt_data(packet + 1 + crypto_box_NONCEBYTES, onion_c->temp_secret_key, packet + 1,
                            packet + 1 + crypto_box_NONCEBYTES + crypto_box_PUBLICKEYBYTES,
                            length - (1 + crypto_box_NONCEBYTES + crypto_box_PUBLICKEYBYTES), temp_plain);
 
-    if ((uint32_t)len != /*sizeof(temp_plain)*/ sizeof_temp_plain)
+    if ((uint32_t)len != sizeOf(temp_plain))
         return 1;
 
-    //uint8_t plain[/*sizeof(temp_plain)*/ sizeof_temp_plain - DATA_IN_RESPONSE_MIN_SIZE]; // C99
-    size_t sizeof_plain = sizeof(uint8_t) * (/*sizeof(temp_plain)*/ sizeof_temp_plain - DATA_IN_RESPONSE_MIN_SIZE); // -C99
-    uint8_t* plain = _alloca( sizeof_plain ); // -C99
+    DYNAMIC( uint8_t, plain, sizeOf(temp_plain) - DATA_IN_RESPONSE_MIN_SIZE ); // -C99
     len = decrypt_data(temp_plain, onion_c->c->self_secret_key, packet + 1, temp_plain + crypto_box_PUBLICKEYBYTES,
-                       /*sizeof(temp_plain)*/ sizeof_temp_plain - crypto_box_PUBLICKEYBYTES, plain);
+                       sizeOf(temp_plain) - crypto_box_PUBLICKEYBYTES, plain);
 
-    if ((uint32_t)len != /*sizeof(plain)*/ sizeof_plain)
+    if ((uint32_t)len != sizeOf(plain))
         return 1;
 
     if (!onion_c->Onion_Data_Handlers[plain[0]].function)
         return 1;
 
     return onion_c->Onion_Data_Handlers[plain[0]].function(onion_c->Onion_Data_Handlers[plain[0]].object, temp_plain, plain,
-            /*sizeof(plain)*/ sizeof_plain);
+            sizeOf(plain));
 }
 
 #define DHTPK_DATA_MIN_LENGTH (1 + sizeof(uint64_t) + crypto_box_PUBLICKEYBYTES)
@@ -806,14 +799,12 @@ int send_onion_data(Onion_Client *onion_c, int friend_num, const uint8_t *data, 
     uint8_t nonce[crypto_box_NONCEBYTES];
     random_nonce(nonce);
 
-    //uint8_t packet[DATA_IN_RESPONSE_MIN_SIZE + length]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (DATA_IN_RESPONSE_MIN_SIZE + length); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, DATA_IN_RESPONSE_MIN_SIZE + length ); // -C99
     memcpy(packet, onion_c->c->self_public_key, crypto_box_PUBLICKEYBYTES);
     int len = encrypt_data(onion_c->friends_list[friend_num].real_public_key, onion_c->c->self_secret_key, nonce, data,
                            length, packet + crypto_box_PUBLICKEYBYTES);
 
-    if ((uint32_t)len + crypto_box_PUBLICKEYBYTES != /*sizeof(packet)*/ sizeof_packet)
+    if ((uint32_t)len + crypto_box_PUBLICKEYBYTES != sizeOf(packet))
         return -1;
 
     unsigned int good = 0;
@@ -826,7 +817,7 @@ int send_onion_data(Onion_Client *onion_c, int friend_num, const uint8_t *data, 
 
         uint8_t o_packet[ONION_MAX_PACKET_SIZE];
         len = create_data_request(o_packet, sizeof(o_packet), onion_c->friends_list[friend_num].real_public_key,
-                                  list_nodes[good_nodes[i]].data_public_key, nonce, packet, /*sizeof(packet)*/ sizeof_packet);
+                                  list_nodes[good_nodes[i]].data_public_key, nonce, packet, sizeOf(packet));
 
         if (len == -1)
             continue;
@@ -856,20 +847,18 @@ static int send_dht_dhtpk(const Onion_Client *onion_c, int friend_num, const uin
     uint8_t nonce[crypto_box_NONCEBYTES];
     new_nonce(nonce);
 
-    //uint8_t temp[DATA_IN_RESPONSE_MIN_SIZE + crypto_box_NONCEBYTES + length]; // C99
-    size_t sizeof_temp = sizeof(uint8_t) * (DATA_IN_RESPONSE_MIN_SIZE + crypto_box_NONCEBYTES + length); // -C99
-    uint8_t* temp = _alloca( sizeof_temp ); // -C99
+    DYNAMIC( uint8_t, temp, DATA_IN_RESPONSE_MIN_SIZE + crypto_box_NONCEBYTES + length ); // -C99
     memcpy(temp, onion_c->c->self_public_key, crypto_box_PUBLICKEYBYTES);
     memcpy(temp + crypto_box_PUBLICKEYBYTES, nonce, crypto_box_NONCEBYTES);
     int len = encrypt_data(onion_c->friends_list[friend_num].real_public_key, onion_c->c->self_secret_key, nonce, data,
                            length, temp + crypto_box_PUBLICKEYBYTES + crypto_box_NONCEBYTES);
 
-    if ((uint32_t)len + crypto_box_PUBLICKEYBYTES + crypto_box_NONCEBYTES != /*sizeof(temp)*/ sizeof_temp)
+    if ((uint32_t)len + crypto_box_PUBLICKEYBYTES + crypto_box_NONCEBYTES != sizeOf(temp))
         return -1;
 
     uint8_t packet[MAX_CRYPTO_REQUEST_SIZE];
     len = create_request(onion_c->dht->self_public_key, onion_c->dht->self_secret_key, packet,
-                         onion_c->friends_list[friend_num].dht_public_key, temp, /*sizeof(temp)*/ sizeof_temp, CRYPTO_PACKET_DHTPK);
+                         onion_c->friends_list[friend_num].dht_public_key, temp, sizeOf(temp), CRYPTO_PACKET_DHTPK);
 
     if (len == -1)
         return -1;

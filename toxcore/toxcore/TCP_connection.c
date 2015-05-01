@@ -1302,9 +1302,7 @@ static void kill_nonused_tcp(TCP_Connections *tcp_c)
         return;
 
     unsigned int i, num_online = 0, num_kill = 0;
-    //unsigned int i, num_online = 0, num_kill = 0, to_kill[tcp_c->tcp_connections_length]; // C99
-    size_t sizeof_to_kill = sizeof(unsigned int) * (tcp_c->tcp_connections_length); // -C99
-    unsigned int* to_kill = _alloca( sizeof_to_kill ); // -C99
+    DYNAMIC( unsigned int, to_kill, tcp_c->tcp_connections_length ); // -C99
 
     for (i = 0; i < tcp_c->tcp_connections_length; ++i) {
         TCP_con *tcp_con = get_tcp_connection(tcp_c, i);

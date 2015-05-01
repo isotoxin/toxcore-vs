@@ -73,9 +73,7 @@ void host_to_net(uint8_t *num, uint16_t numbytes)
 {
 #ifndef WORDS_BIGENDIAN
     uint32_t i;
-    //uint8_t buff[numbytes]; // C99
-    size_t sizeof_buff = sizeof(uint8_t) * (numbytes); // -C99
-    uint8_t* buff = _alloca( sizeof_buff ); // -C99
+    DYNAMIC( uint8_t, buff, numbytes ); // -C99
 
     for (i = 0; i < numbytes; ++i) {
         buff[i] = num[numbytes - i - 1];

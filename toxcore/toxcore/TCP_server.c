@@ -271,9 +271,7 @@ int read_packet_TCP_secure_connection(sock_t sock, uint16_t *next_packet_length,
     if (max_len + crypto_box_MACBYTES < *next_packet_length)
         return -1;
 
-    //uint8_t data_encrypted[*next_packet_length]; // C99
-    size_t sizeof_data_encrypted = sizeof(uint8_t) * (*next_packet_length); // -C99
-    uint8_t* data_encrypted = _alloca( sizeof_data_encrypted ); // -C99
+    DYNAMIC( uint8_t, data_encrypted, *next_packet_length ); // -C99
     int len_packet = read_TCP_packet(sock, data_encrypted, *next_packet_length);
 
     if (len_packet != *next_packet_length)
@@ -403,19 +401,17 @@ static int write_packet_TCP_secure_connection(TCP_Secure_Connection *con, const 
         }
     }
 
-    //uint8_t packet[sizeof(uint16_t) + length + crypto_box_MACBYTES]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (sizeof(uint16_t) + length + crypto_box_MACBYTES); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, sizeof(uint16_t) + length + crypto_box_MACBYTES ); // -C99
 
     uint16_t c_length = htons(length + crypto_box_MACBYTES);
     memcpy(packet, &c_length, sizeof(uint16_t));
     int len = encrypt_data_symmetric(con->shared_key, con->sent_nonce, data, length, packet + sizeof(uint16_t));
 
-    if ((unsigned int)len != (/*sizeof(packet)*/ sizeof_packet - sizeof(uint16_t)))
+    if ((unsigned int)len != (sizeOf(packet) - sizeof(uint16_t)))
         return -1;
 
     if (priority) {
-        len = sendpriority ? send(con->sock, packet, /*sizeof(packet)*/ sizeof_packet, MSG_NOSIGNAL) : 0;
+        len = sendpriority ? send(con->sock, packet, sizeOf(packet), MSG_NOSIGNAL) : 0;
 
         if (len <= 0) {
             len = 0;
@@ -423,25 +419,25 @@ static int write_packet_TCP_secure_connection(TCP_Secure_Connection *con, const 
 
         increment_nonce(con->sent_nonce);
 
-        if ((unsigned int)len == /*sizeof(packet)*/ sizeof_packet) {
+        if ((unsigned int)len == sizeOf(packet)) {
             return 1;
         }
 
-        return add_priority(con, packet, /*sizeof(packet)*/ sizeof_packet, len);
+        return add_priority(con, packet, sizeOf(packet), len);
     }
 
-    len = send(con->sock, packet, /*sizeof(packet)*/ sizeof_packet, MSG_NOSIGNAL);
+    len = send(con->sock, packet, sizeOf(packet), MSG_NOSIGNAL);
 
     if (len <= 0)
         return 0;
 
     increment_nonce(con->sent_nonce);
 
-    if ((unsigned int)len == /*sizeof(packet)*/ sizeof_packet)
+    if ((unsigned int)len == sizeOf(packet))
         return 1;
 
-    memcpy(con->last_packet, packet, /*sizeof(packet)*/ sizeof_packet);
-    con->last_packet_length = /*sizeof(packet)*/ sizeof_packet;
+    memcpy(con->last_packet, packet, sizeOf(packet));
+    con->last_packet_length = sizeOf(packet);
     con->last_packet_sent = len;
     return 1;
 }
@@ -669,14 +665,12 @@ static int handle_TCP_oob_send(TCP_Server *TCP_server, uint32_t con_id, const ui
     int other_index = get_TCP_connection_index(TCP_server, public_key);
 
     if (other_index != -1) {
-        //uint8_t resp_packet[1 + crypto_box_PUBLICKEYBYTES + length]; // C99
-        size_t sizeof_resp_packet = sizeof(uint8_t) * (1 + crypto_box_PUBLICKEYBYTES + length); // -C99
-        uint8_t* resp_packet = _alloca( sizeof_resp_packet ); // -C99
+        DYNAMIC( uint8_t, resp_packet, 1 + crypto_box_PUBLICKEYBYTES + length ); // -C99
         resp_packet[0] = TCP_PACKET_OOB_RECV;
         memcpy(resp_packet + 1, con->public_key, crypto_box_PUBLICKEYBYTES);
         memcpy(resp_packet + 1 + crypto_box_PUBLICKEYBYTES, data, length);
         write_packet_TCP_secure_connection(&TCP_server->accepted_connection_array[other_index], resp_packet,
-                                           /*sizeof(resp_packet)*/ sizeof_resp_packet, 0);
+                                           sizeOf(resp_packet), 0);
     }
 
     return 0;
@@ -730,13 +724,11 @@ static int handle_onion_recv_1(void *object, IP_Port dest, const uint8_t *data, 
     if (con->identifier != dest.ip.ip6.uint64[1])
         return 1;
 
-    //uint8_t packet[1 + length]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (1 + length); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, 1 + length ); // -C99
     memcpy(packet + 1, data, length);
     packet[0] = TCP_PACKET_ONION_RESPONSE;
 
-    if (write_packet_TCP_secure_connection(con, packet, /*sizeof(packet)*/ sizeof_packet, 0) != 1)
+    if (write_packet_TCP_secure_connection(con, packet, sizeOf(packet), 0) != 1)
         return 1;
 
     return 0;
@@ -850,9 +842,7 @@ static int handle_TCP_packet(TCP_Server *TCP_server, uint32_t con_id, const uint
 
             uint32_t index = con->connections[c_id].index;
             uint8_t other_c_id = con->connections[c_id].other_id + NUM_RESERVED_PORTS;
-            //uint8_t new_data[length]; // C99
-            size_t sizeof_new_data = sizeof(uint8_t) * (length); // -C99
-            uint8_t* new_data = _alloca( sizeof_new_data ); // -C99
+            DYNAMIC( uint8_t, new_data, length ); // -C99
             memcpy(new_data, data, length);
             new_data[0] = other_c_id;
             int ret = write_packet_TCP_secure_connection(&TCP_server->accepted_connection_array[index], new_data, length, 0);

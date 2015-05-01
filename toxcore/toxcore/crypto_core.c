@@ -87,12 +87,8 @@ int encrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, cons
     if (length == 0)
         return -1;
 
-    //uint8_t temp_plain[length + crypto_box_ZEROBYTES]; // C99
-    size_t sizeof_temp_plain = sizeof(uint8_t) * (length + crypto_box_ZEROBYTES); // -C99
-    uint8_t* temp_plain = _alloca( sizeof_temp_plain ); // -C99
-    //uint8_t temp_encrypted[length + crypto_box_MACBYTES + crypto_box_BOXZEROBYTES]; // C99
-    size_t sizeof_temp_encrypted = sizeof(uint8_t) * (length + crypto_box_MACBYTES + crypto_box_BOXZEROBYTES); // -C99
-    uint8_t* temp_encrypted = _alloca( sizeof_temp_encrypted ); // -C99
+    DYNAMIC( uint8_t, temp_plain, length + crypto_box_ZEROBYTES ); // -C99
+    DYNAMIC( uint8_t, temp_encrypted, length + crypto_box_MACBYTES + crypto_box_BOXZEROBYTES ); // -C99
 
     memset(temp_plain, 0, crypto_box_ZEROBYTES);
     memcpy(temp_plain + crypto_box_ZEROBYTES, plain, length); // Pad the message with 32 0 bytes.
@@ -111,12 +107,8 @@ int decrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, cons
     if (length <= crypto_box_BOXZEROBYTES)
         return -1;
 
-    //uint8_t temp_plain[length + crypto_box_ZEROBYTES]; // C99
-    size_t sizeof_temp_plain = sizeof(uint8_t) * (length + crypto_box_ZEROBYTES); // -C99
-    uint8_t* temp_plain = _alloca( sizeof_temp_plain ); // -C99
-    //uint8_t temp_encrypted[length + crypto_box_BOXZEROBYTES]; // C99
-    size_t sizeof_temp_encrypted = sizeof(uint8_t) * (length + crypto_box_BOXZEROBYTES); // -C99
-    uint8_t* temp_encrypted = _alloca( sizeof_temp_encrypted ); // -C99
+    DYNAMIC( uint8_t, temp_plain, length + crypto_box_ZEROBYTES ); // -C99
+    DYNAMIC( uint8_t, temp_encrypted, length + crypto_box_BOXZEROBYTES ); // -C99
 
     memset(temp_encrypted, 0, crypto_box_BOXZEROBYTES);
     memcpy(temp_encrypted + crypto_box_BOXZEROBYTES, encrypted, length); // Pad the message with 16 0 bytes.

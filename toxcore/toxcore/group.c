@@ -859,14 +859,12 @@ static unsigned int send_packet_group_peer(Friend_Connections *fr_c, int friendc
         return 0;
 
     group_num = htons(group_num);
-    //uint8_t packet[1 + sizeof(uint16_t) + length]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (1 + sizeof(uint16_t) + length); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, 1 + sizeof(uint16_t) + length ); // -C99
     packet[0] = packet_id;
     memcpy(packet + 1, &group_num, sizeof(uint16_t));
     memcpy(packet + 1 + sizeof(uint16_t), data, length);
     return write_cryptpacket(fr_c->net_crypto, friend_connection_crypt_connection_id(fr_c, friendcon_id), packet,
-                             /*sizeof(packet)*/ sizeof_packet, 0) != -1;
+                             sizeOf(packet), 0) != -1;
 }
 
 /* Send a group lossy packet to friendcon_id.
@@ -881,15 +879,12 @@ static unsigned int send_lossy_group_peer(Friend_Connections *fr_c, int friendco
         return 0;
 
     group_num = htons(group_num);
-    //uint8_t packet[1 + sizeof(uint16_t) + length]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (1 + sizeof(uint16_t) + length); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
-
+    DYNAMIC( uint8_t, packet, 1 + sizeof(uint16_t) + length ); // -C99
     packet[0] = packet_id;
     memcpy(packet + 1, &group_num, sizeof(uint16_t));
     memcpy(packet + 1 + sizeof(uint16_t), data, length);
     return send_lossy_cryptpacket(fr_c->net_crypto, friend_connection_crypt_connection_id(fr_c, friendcon_id), packet,
-                                  /*sizeof(packet)*/ sizeof_packet) != -1;
+                                  sizeOf(packet)) != -1;
 }
 
 #define INVITE_PACKET_SIZE (1 + sizeof(uint16_t) + GROUP_IDENTIFIER_LENGTH)
@@ -1498,12 +1493,10 @@ static unsigned int send_peers(Group_Chats *g_c, int groupnumber, int friendcon_
     }
 
     if (g->title_len) {
-        //uint8_t Packet[1 + g->title_len]; // C99
-        size_t sizeof_Packet = sizeof(uint8_t) * (1 + g->title_len); // -C99
-        uint8_t* Packet = _alloca( sizeof_Packet ); // -C99
+        DYNAMIC( uint8_t, Packet, 1 + g->title_len ); // -C99
         Packet[0] = PEER_TITLE_ID;
         memcpy(Packet + 1, g->title, g->title_len);
-        send_packet_group_peer(g_c->fr_c, friendcon_id, PACKET_ID_DIRECT_GROUPCHAT, group_num, Packet, /*sizeof(Packet)*/ sizeof_Packet);
+        send_packet_group_peer(g_c->fr_c, friendcon_id, PACKET_ID_DIRECT_GROUPCHAT, group_num, Packet, sizeOf(Packet));
     }
 
     return sent;
@@ -1735,9 +1728,7 @@ static unsigned int send_message_group(const Group_Chats *g_c, int groupnumber, 
     if (g->status != GROUPCHAT_STATUS_CONNECTED)
         return 0;
 
-    //uint8_t packet[sizeof(uint16_t) + sizeof(uint32_t) + 1 + len]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (sizeof(uint16_t) + sizeof(uint32_t) + 1 + len); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, sizeof(uint16_t) + sizeof(uint32_t) + 1 + len ); // -C99
     uint16_t peer_num = htons(g->peer_number);
     memcpy(packet, &peer_num, sizeof(peer_num));
 
@@ -1754,7 +1745,7 @@ static unsigned int send_message_group(const Group_Chats *g_c, int groupnumber, 
     if (len)
         memcpy(packet + sizeof(uint16_t) + sizeof(uint32_t) + 1, data, len);
 
-    return send_message_all_close(g_c, groupnumber, packet, /*sizeof(packet)*/ sizeof_packet, -1);
+    return send_message_all_close(g_c, groupnumber, packet, sizeOf(packet), -1);
 }
 
 /* send a group message
@@ -1796,16 +1787,14 @@ int send_group_lossy_packet(const Group_Chats *g_c, int groupnumber, const uint8
     if (!g)
         return -1;
 
-    //uint8_t packet[sizeof(uint16_t) * 2 + length]; // C99
-    size_t sizeof_packet = sizeof(uint8_t) * (sizeof(uint16_t) * 2 + length); // -C99
-    uint8_t* packet = _alloca( sizeof_packet ); // -C99
+    DYNAMIC( uint8_t, packet, sizeof(uint16_t) * 2 + length ); // -C99
     uint16_t peer_number = htons(g->peer_number);
     memcpy(packet, &peer_number, sizeof(uint16_t));
     uint16_t message_num = htons(g->lossy_message_number);
     memcpy(packet + sizeof(uint16_t), &message_num, sizeof(uint16_t));
     memcpy(packet + sizeof(uint16_t) * 2, data, length);
 
-    if (send_lossy_all_close(g_c, groupnumber, packet, /*sizeof(packet)*/ sizeof_packet, -1) == 0) {
+    if (send_lossy_all_close(g_c, groupnumber, packet, sizeOf(packet), -1) == 0) {
         return -1;
     }
 
@@ -1908,9 +1897,7 @@ static void handle_message_packet_group(Group_Chats *g_c, int groupnumber, const
             if (msg_data_len == 0)
                 return;
 
-            //uint8_t newmsg[msg_data_len + 1]; // C99
-            size_t sizeof_newmsg = sizeof(uint8_t) * (msg_data_len + 1); // -C99
-            uint8_t* newmsg = _alloca( sizeof_newmsg ); // -C99
+            DYNAMIC( uint8_t, newmsg, msg_data_len + 1 ); // -C99
             memcpy(newmsg, msg_data, msg_data_len);
             newmsg[msg_data_len] = 0;
 
@@ -1925,9 +1912,7 @@ static void handle_message_packet_group(Group_Chats *g_c, int groupnumber, const
             if (msg_data_len == 0)
                 return;
 
-            //uint8_t newmsg[msg_data_len + 1]; // C99
-            size_t sizeof_newmsg = sizeof(uint8_t) * (msg_data_len + 1); // -C99
-            uint8_t* newmsg = _alloca( sizeof_newmsg ); // -C99
+            DYNAMIC( uint8_t, newmsg, msg_data_len + 1 ); // -C99
             memcpy(newmsg, msg_data, msg_data_len);
             newmsg[msg_data_len] = 0;
 

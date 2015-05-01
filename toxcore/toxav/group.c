@@ -480,16 +480,14 @@ static int send_audio_packet(Group_Chats *g_c, int groupnumber, uint8_t *packet,
         return -1;
 
     Group_AV *group_av = group_get_object(g_c, groupnumber);
-    //uint8_t data[1 + sizeof(uint16_t) + length]; // C99
-    size_t sizeof_data = sizeof(uint8_t) * (1 + sizeof(uint16_t) + length); // -C99
-    uint8_t* data = _alloca( sizeof_data ); // -C99
+    DYNAMIC( uint8_t, data, 1 + sizeof(uint16_t) + length ); // -C99
     data[0] = GROUP_AUDIO_PACKET_ID;
 
     uint16_t sequnum = htons(group_av->audio_sequnum);
     memcpy(data + 1, &sequnum, sizeof(sequnum));
     memcpy(data + 1 + sizeof(sequnum), packet, length);
 
-    if (send_group_lossy_packet(g_c, groupnumber, data, /*sizeof(data)*/ sizeof_data) == -1)
+    if (send_group_lossy_packet(g_c, groupnumber, data, sizeOf(data)) == -1)
         return -1;
 
     ++group_av->audio_sequnum;

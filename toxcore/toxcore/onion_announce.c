@@ -394,13 +394,11 @@ static int handle_data_request(void *object, IP_Port source, const uint8_t *pack
     if (index == -1)
         return 1;
 
-    //uint8_t data[length - (crypto_box_PUBLICKEYBYTES + ONION_RETURN_3)]; // C99
-    size_t sizeof_data = sizeof(uint8_t) * (length - (crypto_box_PUBLICKEYBYTES + ONION_RETURN_3)); // -C99
-    uint8_t* data = _alloca( sizeof_data ); // -C99
+    DYNAMIC( uint8_t, data, length - (crypto_box_PUBLICKEYBYTES + ONION_RETURN_3) ); // -C99
     data[0] = NET_PACKET_ONION_DATA_RESPONSE;
     memcpy(data + 1, packet + 1 + crypto_box_PUBLICKEYBYTES, length - (1 + crypto_box_PUBLICKEYBYTES + ONION_RETURN_3));
 
-    if (send_onion_response(onion_a->net, onion_a->entries[index].ret_ip_port, data, /*sizeof(data)*/ sizeof_data,
+    if (send_onion_response(onion_a->net, onion_a->entries[index].ret_ip_port, data, sizeOf(data),
                             onion_a->entries[index].ret) == -1)
         return 1;
 

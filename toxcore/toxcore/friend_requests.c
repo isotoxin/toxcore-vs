@@ -129,11 +129,9 @@ static int friendreq_handlepacket(void *object, const uint8_t *source_pubkey, co
     addto_receivedlist(fr, source_pubkey);
 
     uint32_t message_len = length - sizeof(fr->nospam);
-    //uint8_t message[message_len + 1]; // C99
-    size_t sizeof_message = sizeof(uint8_t) * (message_len + 1); // -C99
-    uint8_t* message = _alloca( sizeof_message ); // -C99
+    DYNAMIC( uint8_t, message, message_len + 1 ); // -C99
     memcpy(message, packet + sizeof(fr->nospam), message_len);
-    message[/*sizeof(message)*/ sizeof_message - 1] = 0; /* Be sure the message is null terminated. */
+    message[sizeOf(message) - 1] = 0; /* Be sure the message is null terminated. */
 
     (*fr->handle_friendrequest)(fr->handle_friendrequest_object, source_pubkey, message, message_len,
                                 fr->handle_friendrequest_userdata);
