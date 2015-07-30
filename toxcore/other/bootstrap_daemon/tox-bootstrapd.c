@@ -105,6 +105,9 @@ int manage_keys(DHT *dht, char *keys_file_path)
 
         keys_file = fopen(keys_file_path, "w");
 
+        if (!keys_file)
+            return 0;
+
         const size_t write_size = fwrite(keys, sizeof(uint8_t), KEYS_SIZE, keys_file);
 
         if (write_size != KEYS_SIZE) {
@@ -621,8 +624,7 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        tcp_server = new_TCP_server(enable_ipv6, tcp_relay_port_count, tcp_relay_ports, dht->self_public_key,
-                                    dht->self_secret_key, onion);
+        tcp_server = new_TCP_server(enable_ipv6, tcp_relay_port_count, tcp_relay_ports, dht->self_secret_key, onion);
 
         // tcp_relay_port_count != 0 at this point
         free(tcp_relay_ports);

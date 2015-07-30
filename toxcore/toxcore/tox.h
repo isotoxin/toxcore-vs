@@ -32,6 +32,15 @@
 extern "C" {
 #endif
 
+
+/*******************************************************************************
+ * `tox.h` SHOULD *NOT* BE EDITED MANUALLY – any changes should be made to   *
+ * `tox.in.h`, located in `other/apidsl/`. For instructions on how to        *
+ * generate `tox.h` from `tox.in.h` please refer to `other/apidsl/README.md` *
+ ******************************************************************************/
+
+
+
 /** \page core Public core API for Tox clients.
  *
  * Every function that can fail takes a function-specific error code pointer
@@ -451,7 +460,15 @@ struct Tox_Options {
 
 
     /**
-     * The port to use for the TCP server. If 0, the tcp server is disabled.
+     * The port to use for the TCP server (relay). If 0, the TCP server is
+     * disabled.
+     *
+     * Enabling it is not required for Tox to function properly.
+     *
+     * When enabled, your Tox instance can act as a TCP relay for other Tox
+     * instance. This leads to increased traffic, thus when writing a client
+     * it is recommended to enable TCP server only if the user has an option
+     * to disable it.
      */
     uint16_t tcp_port;
 
@@ -1266,7 +1283,7 @@ void tox_callback_friend_name(Tox *tox, tox_friend_name_cb *callback, void *user
 size_t tox_friend_get_status_message_size(const Tox *tox, uint32_t friend_number, TOX_ERR_FRIEND_QUERY *error);
 
 /**
- * Write the name of the friend designated by the given friend number to a byte
+ * Write the status message of the friend designated by the given friend number to a byte
  * array.
  *
  * Call tox_friend_get_status_message_size to determine the allocation size for the `status_name`
@@ -1275,7 +1292,7 @@ size_t tox_friend_get_status_message_size(const Tox *tox, uint32_t friend_number
  * The data written to `status_message` is equal to the data received by the last
  * `friend_status_message` callback.
  *
- * @param name A valid memory region large enough to store the friend's name.
+ * @param status_message A valid memory region large enough to store the friend's status message.
  */
 bool tox_friend_get_status_message(const Tox *tox, uint32_t friend_number, uint8_t *status_message,
                                    TOX_ERR_FRIEND_QUERY *error);

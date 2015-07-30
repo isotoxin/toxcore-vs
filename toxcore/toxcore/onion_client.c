@@ -198,6 +198,16 @@ static int is_path_used(const Onion_Client_Paths *onion_paths, const Node_format
     return -1;
 }
 
+/* is path timed out */
+static _Bool path_timed_out(Onion_Client_Paths *onion_paths, uint32_t pathnum)
+{
+    pathnum = pathnum % NUMBER_ONION_PATHS;
+
+    return ((onion_paths->last_path_success[pathnum] + ONION_PATH_TIMEOUT < onion_paths->last_path_used[pathnum]
+             && onion_paths->last_path_used_times[pathnum] >= ONION_PATH_MAX_NO_RESPONSE_USES)
+            || is_timeout(onion_paths->path_creation_time[pathnum], ONION_PATH_MAX_LIFETIME));
+}
+
 /* Create a new path or use an old suitable one (if pathnum is valid)
  * or a random one from onion_paths.
  *
@@ -209,12 +219,13 @@ static int is_path_used(const Onion_Client_Paths *onion_paths, const Node_format
  */
 static int random_path(const Onion_Client *onion_c, Onion_Client_Paths *onion_paths, uint32_t pathnum, Onion_Path *path)
 {
-    if (pathnum >= NUMBER_ONION_PATHS)
+    if (pathnum == UINT32_MAX) {
         pathnum = rand() % NUMBER_ONION_PATHS;
+    } else {
+        pathnum = pathnum % NUMBER_ONION_PATHS;
+    }
 
-    if ((onion_paths->last_path_success[pathnum] + ONION_PATH_TIMEOUT < onion_paths->last_path_used[pathnum]
-            && onion_paths->last_path_used_times[pathnum] >= ONION_PATH_MAX_NO_RESPONSE_USES)
-            || is_timeout(onion_paths->path_creation_time[pathnum], ONION_PATH_MAX_LIFETIME)) {
+    if (path_timed_out(onion_paths, pathnum)) {
         Node_format nodes[ONION_PATH_LENGTH];
 
         if (random_nodes_path_onion(onion_c, nodes, ONION_PATH_LENGTH) != ONION_PATH_LENGTH)
@@ -247,6 +258,15 @@ static int random_path(const Onion_Client *onion_c, Onion_Client_Paths *onion_pa
     return 0;
 }
 
+/* Does path with path_num exist. */
+static _Bool path_exists(Onion_Client_Paths *onion_paths, uint32_t path_num)
+{
+    if (path_timed_out(onion_paths, path_num))
+        return 0;
+
+    return onion_paths->paths[path_num % NUMBER_ONION_PATHS].path_num == path_num;
+}
+
 /* Set path timeouts, return the path number.
  *
  */
@@ -277,7 +297,7 @@ static uint32_t set_path_timeouts(Onion_Client *onion_c, uint32_t num, uint32_t 
             }
         }
 
-        return path_num % NUMBER_ONION_PATHS;
+        return path_num;
     }
 
     return ~0;
@@ -1315,7 +1335,7 @@ static void do_announce(Onion_Client *onion_c)
 
         unsigned int interval = ANNOUNCE_INTERVAL_NOT_ANNOUNCED;
 
-        if (list_nodes[i].is_stored) {
+        if (list_nodes[i].is_stored && path_exists(&onion_c->onion_paths_self, list_nodes[i].path_used)) {
             interval = ANNOUNCE_INTERVAL_ANNOUNCED;
         }
 
@@ -1432,11 +1452,14 @@ void do_onion_client(Onion_Client *onion_c)
         }
     }
 
-    onion_c->UDP_connected = DHT_non_lan_connected(onion_c->dht);
+    _Bool UDP_connected = DHT_non_lan_connected(onion_c->dht);
 
     if (is_timeout(onion_c->first_run, ONION_CONNECTION_SECONDS)) {
-        set_tcp_onion_status(onion_c->c->tcp_c, !onion_c->UDP_connected);
+        set_tcp_onion_status(onion_c->c->tcp_c, !UDP_connected);
     }
+
+    onion_c->UDP_connected = UDP_connected
+                             || get_random_tcp_onion_conn_number(onion_c->c->tcp_c) == -1; /* Check if connected to any TCP relays. */
 
     if (onion_connection_status(onion_c)) {
         for (i = 0; i < onion_c->num_friends; ++i) {
