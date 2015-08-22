@@ -53,6 +53,11 @@ SODIUM_EXPORT = \
 	sodium/runtime.h \
 	sodium/utils.h
 
+if NATIVECLIENT
+SODIUM_EXPORT += \
+	sodium/randombytes_nativeclient.h
+endif
+
 EXTRA_SRC = $(SODIUM_EXPORT) \
 	sodium/version.h.in
 

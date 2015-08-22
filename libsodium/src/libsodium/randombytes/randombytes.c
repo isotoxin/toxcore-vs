@@ -12,9 +12,18 @@
 #include "randombytes.h"
 #include "randombytes_sysrandom.h"
 
+#ifdef __native_client__
+# include "randombytes_nativeclient.h"
+#endif
+
 #ifndef __EMSCRIPTEN__
+#ifdef __native_client__
+static const randombytes_implementation *implementation =
+    &randombytes_nativeclient_implementation;
+#else
 static const randombytes_implementation *implementation =
     &randombytes_sysrandom_implementation;
+#endif
 #else
 static const randombytes_implementation *implementation = NULL;
 #endif
@@ -60,7 +69,8 @@ randombytes_stir(void)
     EM_ASM({
         if (Module.getRandomValue === undefined) {
             try {
-                var crypto_ = ("object" === typeof window ? window : self).crypto,
+                var window_ = "object" === typeof window ? window : self,
+                    crypto_ = typeof window_.crypto !== "undefined" ? window_.crypto : window_.msCrypto,
                     randomValuesStandard = function() {
                         var buf = new Uint32Array(1);
                         crypto_.getRandomValues(buf);

@@ -7,7 +7,7 @@
 
 typedef int ssize_t;
 
-#define snprintf _snprintf
+//#define snprintf _snprintf
 
 #define DYNAMIC( eltype, arrname, arrsize ) size_t sizeof_##arrname = sizeof(eltype) * (arrsize); eltype * arrname = _alloca( sizeof_##arrname )
 #define sizeOf( dynarrname ) sizeof_##dynarrname
