@@ -1,5 +1,0 @@
-@echo off
-SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
-
-set BUILD_PFX=./
-set SRC_PATH_BARE=C:\_my\dev\_github\libvpx

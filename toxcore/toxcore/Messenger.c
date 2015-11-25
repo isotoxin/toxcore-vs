@@ -149,6 +149,19 @@ static int send_online_packet(Messenger *m, int32_t friendnumber)
     if (friend_not_valid(m, friendnumber))
         return 0;
 
+    if (m->client_capabilities)
+    {
+        uint8_t buf[TOX_CLIENT_CAPS_SIZE + 2];
+        buf[0] = PACKET_ID_ONLINE;
+        buf[1] = random_int() & 0xff; // random byte
+        size_t caps_len = strnlen(m->client_capabilities, TOX_CLIENT_CAPS_SIZE) + 2;
+        memcpy(buf+2, m->client_capabilities, caps_len);
+
+        write_cryptpacket(m->net_crypto, friend_connection_crypt_connection_id(m->fr_c,
+            m->friendlist[friendnumber].friendcon_id), buf, caps_len, 0);
+    }
+
+
     uint8_t packet = PACKET_ID_ONLINE;
     return write_cryptpacket(m->net_crypto, friend_connection_crypt_connection_id(m->fr_c,
                              m->friendlist[friendnumber].friendcon_id), &packet, sizeof(packet), 0) != -1;
@@ -393,6 +406,10 @@ int m_delfriend(Messenger *m, int32_t friendnumber)
     }
 
     kill_friend_connection(m->fr_c, m->friendlist[friendnumber].friendcon_id);
+
+    if (m->friendlist[friendnumber].client_caps)
+        free(m->friendlist[friendnumber].client_caps);
+
     memset(&(m->friendlist[friendnumber]), 0, sizeof(Friend));
     uint32_t i;
 
@@ -679,6 +696,14 @@ uint8_t m_get_userstatus(const Messenger *m, int32_t friendnumber)
     }
 
     return status;
+}
+
+const uint8_t *m_get_user_clientcaps(const Messenger *m, uint32_t friendnumber)
+{
+    if (friend_not_valid(m, friendnumber))
+        return 0;
+
+    return m->friendlist[friendnumber].client_caps;
 }
 
 uint8_t m_get_self_userstatus(const Messenger *m)
@@ -1264,7 +1289,7 @@ int file_seek(const Messenger *m, int32_t friendnumber, uint32_t filenumber, uin
     if (ft->status != FILESTATUS_NOT_ACCEPTED)
         return -5;
 
-    if (position > ft->size) {
+    if (position >= ft->size) {
         return -6;
     }
 
@@ -1569,7 +1594,7 @@ static int handle_filecontrol(Messenger *m, int32_t friendnumber, uint8_t receiv
             return -1;
         }
 
-        /* seek can only be sent by the receiver to seek before resuming broken tranfers. */
+        /* seek can only be sent by the receiver to seek before resuming broken transfers. */
         if (ft->status != FILESTATUS_NOT_ACCEPTED || !receive_send) {
             return -1;
         }
@@ -1577,7 +1602,7 @@ static int handle_filecontrol(Messenger *m, int32_t friendnumber, uint8_t receiv
         memcpy(&position, data, sizeof(position));
         net_to_host((uint8_t *) &position, sizeof(position));
 
-        if (position > ft->size) {
+        if (position >= ft->size) {
             return -1;
         }
 
@@ -1748,7 +1773,7 @@ static int friend_already_added(const uint8_t *real_pk, void *data)
 }
 
 /* Run this at startup. */
-Messenger *new_messenger(Messenger_Options *options, unsigned int *error)
+Messenger *new_messenger(const char *client_capabilities, Messenger_Options *options, unsigned int *error)
 {
     Messenger *m = calloc(1, sizeof(Messenger));
 
@@ -1757,6 +1782,8 @@ Messenger *new_messenger(Messenger_Options *options, unsigned int *error)
 
     if ( ! m )
         return NULL;
+
+    m->client_capabilities = client_capabilities;
 
     unsigned int net_err = 0;
 
@@ -1916,7 +1943,19 @@ static int handle_packet(void *object, int i, uint8_t *temp, uint16_t len)
     uint32_t data_length = len - 1;
 
     if (m->friendlist[i].status != FRIEND_ONLINE) {
-        if (packet_id == PACKET_ID_ONLINE && len == 1) {
+        if (packet_id == PACKET_ID_ONLINE) {
+
+            if (len >= 2)
+            {
+                uint32_t caps_length = len - 2;
+                if (m->friendlist[i].client_caps)
+                    free(m->friendlist[i].client_caps);
+
+                m->friendlist[i].client_caps = malloc(caps_length + 1);
+                memcpy( m->friendlist[i].client_caps, data+1, caps_length);
+                m->friendlist[i].client_caps[caps_length] = 0;
+            }
+
             set_friend_status(m, i, FRIEND_ONLINE);
             send_online_packet(m, i);
         } else {
@@ -2128,6 +2167,11 @@ static int handle_packet(void *object, int i, uint8_t *temp, uint16_t len)
                 file_data = data + 1;
             }
 
+            /* Prevent more data than the filesize from being passed to clients. */
+            if ((ft->transferred + file_data_length) > ft->size) {
+                file_data_length = ft->size - ft->transferred;
+            }
+
             if (m->file_filedata)
                 (*m->file_filedata)(m, i, real_filenumber, position, file_data, file_data_length, m->file_filedata_userdata);
 
@@ -2240,7 +2284,7 @@ static void connection_status_cb(Messenger *m)
 }
 
 
-#ifdef LOGGING
+#ifdef TOX_LOGGER
 #define DUMPING_CLIENTS_FRIENDS_EVERY_N_SECONDS 60UL
 static time_t lastdump = 0;
 static char IDString[crypto_box_PUBLICKEYBYTES * 2 + 1];
@@ -2316,7 +2360,7 @@ void do_messenger(Messenger *m)
     do_friends(m);
     connection_status_cb(m);
 
-#ifdef LOGGING
+#ifdef TOX_LOGGER
 
     if (unix_time() > lastdump + DUMPING_CLIENTS_FRIENDS_EVERY_N_SECONDS) {
 
@@ -2350,8 +2394,8 @@ void do_messenger(Messenger *m)
 
         /* dht contains additional "friends" (requests) */
         uint32_t num_dhtfriends = m->dht->num_friends;
-        int32_t m2dht[num_dhtfriends];
-        int32_t dht2m[num_dhtfriends];
+        DYNAMIC( int32_t, m2dht, num_dhtfriends ); // -C99
+        DYNAMIC( int32_t, dht2m, num_dhtfriends ); // -C99
 
         for (friend = 0; friend < num_dhtfriends; friend++) {
             m2dht[friend] = -1;
@@ -2415,7 +2459,7 @@ void do_messenger(Messenger *m)
         }
     }
 
-#endif /* LOGGING */
+#endif /* TOX_LOGGER */
 }
 
 /* new messenger format for load/save, more robust and forward compatible */

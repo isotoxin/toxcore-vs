@@ -1,4 +1,5 @@
 
+#include <stdlib.h>
 #include <sys/types.h>
 #ifndef _WIN32
 # include <sys/stat.h>
@@ -13,7 +14,6 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #ifndef _WIN32
 # include <unistd.h>
@@ -33,26 +33,30 @@ BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
 # pragma comment(lib, "advapi32.lib")
 #endif
 
-#ifdef __OpenBSD__
+#if defined(__OpenBSD__) || defined(__CloudABI__)
+# define HAVE_SAFE_ARC4RANDOM 1
+#endif
 
-uint32_t
+#ifdef HAVE_SAFE_ARC4RANDOM
+
+static uint32_t
 randombytes_sysrandom(void)
 {
     return arc4random();
 }
 
-void
+static void
 randombytes_sysrandom_stir(void)
 {
 }
 
-void
+static void
 randombytes_sysrandom_buf(void * const buf, const size_t size)
 {
     return arc4random_buf(buf, size);
 }
 
-int
+static int
 randombytes_sysrandom_close(void)
 {
     return 0;
@@ -115,7 +119,15 @@ randombytes_sysrandom_random_dev_open(void)
     do {
         fd = open(*device, O_RDONLY);
         if (fd != -1) {
-            if (fstat(fd, &st) == 0 && S_ISCHR(st.st_mode)) {
+            if (fstat(fd, &st) == 0 &&
+# ifdef __COMPCERT__
+                1
+# elif defined(S_ISNAM)
+                (S_ISNAM(st.st_mode) || S_ISCHR(st.st_mode))
+# else
+                S_ISCHR(st.st_mode)
+# endif
+               ) {
 # if defined(F_SETFD) && defined(FD_CLOEXEC)
                 (void) fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
 # endif
@@ -176,14 +188,14 @@ randombytes_sysrandom_init(void)
 
 # ifdef SYS_getrandom
     {
-	unsigned char fodder[16];
+        unsigned char fodder[16];
 
-	if (randombytes_linux_getrandom(fodder, sizeof fodder) == 0) {
-	    stream.getrandom_available = 1;
-	    errno = errno_save;
-	    return;
-	}
-	stream.getrandom_available = 0;
+        if (randombytes_linux_getrandom(fodder, sizeof fodder) == 0) {
+            stream.getrandom_available = 1;
+            errno = errno_save;
+            return;
+        }
+        stream.getrandom_available = 0;
     }
 # endif
 
@@ -202,7 +214,7 @@ randombytes_sysrandom_init(void)
 }
 #endif
 
-void
+static void
 randombytes_sysrandom_stir(void)
 {
     if (stream.initialized == 0) {
@@ -219,7 +231,7 @@ randombytes_sysrandom_stir_if_needed(void)
     }
 }
 
-int
+static int
 randombytes_sysrandom_close(void)
 {
     int ret = -1;
@@ -245,17 +257,7 @@ randombytes_sysrandom_close(void)
     return ret;
 }
 
-uint32_t
-randombytes_sysrandom(void)
-{
-    uint32_t r;
-
-    randombytes_sysrandom_buf(&r, sizeof r);
-
-    return r;
-}
-
-void
+static void
 randombytes_sysrandom_buf(void * const buf, const size_t size)
 {
     randombytes_sysrandom_stir_if_needed();
@@ -286,9 +288,19 @@ randombytes_sysrandom_buf(void * const buf, const size_t size)
 #endif
 }
 
+static uint32_t
+randombytes_sysrandom(void)
+{
+    uint32_t r;
+
+    randombytes_sysrandom_buf(&r, sizeof r);
+
+    return r;
+}
+
 #endif /* __OpenBSD__ */
 
-const char *
+static const char *
 randombytes_sysrandom_implementation_name(void)
 {
     return "sysrandom";

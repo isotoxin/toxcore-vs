@@ -8,6 +8,7 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "api.h"
@@ -131,6 +132,7 @@ chacha_encrypt_bytes(chacha_ctx *x, const u8 *m, u8 *c, unsigned long long bytes
 
     for (;;) {
         if (bytes < 64) {
+            memset(tmp, 0, 64);
             for (i = 0; i < bytes; ++i) {
                 tmp[i] = m[i];
             }
@@ -265,6 +267,9 @@ crypto_stream_chacha20_ietf_ref(unsigned char *c, unsigned long long clen,
 
     if (!clen) {
         return 0;
+    }
+    if (clen > 64ULL * (1ULL << 32) - 64ULL) {
+        abort();
     }
     (void) sizeof(int[crypto_stream_chacha20_KEYBYTES == 256 / 8 ? 1 : -1]);
     chacha_keysetup(&ctx, k);

@@ -51,7 +51,7 @@ static unsigned char canary[CANARY_SIZE];
 
 #ifdef HAVE_WEAK_SYMBOLS
 __attribute__((weak)) void
-_sodium_dummy_symbol_to_prevent_lto(void * const pnt, const size_t len)
+_sodium_dummy_symbol_to_prevent_memzero_lto(void * const pnt, const size_t len)
 {
     (void) pnt;
     (void) len;
@@ -71,7 +71,7 @@ sodium_memzero(void * const pnt, const size_t len)
     explicit_bzero(pnt, len);
 #elif HAVE_WEAK_SYMBOLS
     memset(pnt, 0, len);
-    _sodium_dummy_symbol_to_prevent_lto(pnt, len);
+    _sodium_dummy_symbol_to_prevent_memzero_lto(pnt, len);
 #else
     volatile unsigned char *pnt_ = (volatile unsigned char *) pnt;
     size_t                     i = (size_t) 0U;
@@ -82,18 +82,131 @@ sodium_memzero(void * const pnt, const size_t len)
 #endif
 }
 
+#ifdef HAVE_WEAK_SYMBOLS
+__attribute__((weak)) void
+_sodium_dummy_symbol_to_prevent_memcmp_lto(const unsigned char *b1,
+                                           const unsigned char *b2,
+                                           const size_t len)
+{
+    (void) b1;
+    (void) b2;
+    (void) len;
+}
+#endif
+
 int
 sodium_memcmp(const void * const b1_, const void * const b2_, size_t len)
 {
+#ifdef HAVE_WEAK_SYMBOLS
     const unsigned char *b1 = (const unsigned char *) b1_;
     const unsigned char *b2 = (const unsigned char *) b2_;
+#else
+    const volatile unsigned char *b1 = (const volatile unsigned char *) b1_;
+    const volatile unsigned char *b2 = (const volatile unsigned char *) b2_;
+#endif
     size_t               i;
     unsigned char        d = (unsigned char) 0U;
 
+#if HAVE_WEAK_SYMBOLS
+    _sodium_dummy_symbol_to_prevent_memcmp_lto(b1, b2, len);
+#endif
     for (i = 0U; i < len; i++) {
         d |= b1[i] ^ b2[i];
     }
-    return (int) ((1 & ((d - 1) >> 8)) - 1);
+    return (1 & ((d - 1) >> 8)) - 1;
+}
+
+#ifdef HAVE_WEAK_SYMBOLS
+__attribute__((weak)) void
+_sodium_dummy_symbol_to_prevent_compare_lto(const unsigned char *b1,
+                                            const unsigned char *b2,
+                                            const size_t len)
+{
+    (void) b1;
+    (void) b2;
+    (void) len;
+}
+#endif
+
+int
+sodium_compare(const unsigned char *b1_, const unsigned char *b2_, size_t len)
+{
+#ifdef HAVE_WEAK_SYMBOLS
+    const unsigned char *b1 = b1_;
+    const unsigned char *b2 = b2_;
+#else
+    const volatile unsigned char *b1 = (const volatile unsigned char *) b1_;
+    const volatile unsigned char *b2 = (const volatile unsigned char *) b2_;
+#endif
+    unsigned char gt = 0U;
+    unsigned char eq = 1U;
+    size_t        i;
+
+#if HAVE_WEAK_SYMBOLS
+    _sodium_dummy_symbol_to_prevent_compare_lto(b1, b2, len);
+#endif
+    i = len;
+    while (i != 0U) {
+        i--;
+        gt |= ((b2[i] - b1[i]) >> 8) & eq;
+        eq &= ((b2[i] ^ b1[i]) - 1) >> 8;
+    }
+    return (int) (gt + gt + eq) - 1;
+}
+
+int
+sodium_is_zero(const unsigned char *n, const size_t nlen)
+{
+    size_t        i;
+    unsigned char d = 0U;
+
+    for (i = 0U; i < nlen; i++) {
+        d |= n[i];
+    }
+    return 1 & ((d - 1) >> 8);
+}
+
+void
+sodium_increment(unsigned char *n, const size_t nlen)
+{
+    size_t        i = 0U;
+#if !defined(CPU_UNALIGNED_ACCESS) || !defined(NATIVE_LITTLE_ENDIAN)
+    uint_fast16_t c = 1U;
+#else
+    uint_fast64_t c = 1U;
+    for (; i < (nlen & ~0x3); i += 4U) {
+        c += (uint_fast64_t) *((const uint32_t *) (const void *) &n[i]);
+        *((uint32_t *) (void *) &n[i]) = (uint32_t) c;
+        c >>= 32;
+    }
+#endif
+    for (; i < nlen; i++) {
+        c += (uint_fast16_t) n[i];
+        n[i] = (unsigned char) c;
+        c >>= 8;
+    }
+}
+
+void
+sodium_add(unsigned char *a, const unsigned char *b, const size_t len)
+{
+    size_t        i = 0U;
+#if !defined(CPU_UNALIGNED_ACCESS) || !defined(NATIVE_LITTLE_ENDIAN)
+    uint_fast16_t c = 0U;
+#else
+    uint_fast64_t c = 0U;
+    for (; i < (len & ~0x3); i += 4U) {
+        c += (uint_fast64_t) *((const uint32_t *) (const void *) &a[i]) +
+             (uint_fast64_t) *((const uint32_t *) (const void *) &b[i]);
+        *((uint32_t *) (void *) &a[i]) = (uint32_t) c;
+        c >>= 32;
+    }
+#endif
+    for (; i < len; i++) {
+        c += (uint_fast16_t) a[i] + (uint_fast16_t) b[i];
+        a[i] = (unsigned char) c;
+        c >>= 8;
+    }
 }
 
 /* Derived from original code by CodesInChaos */
@@ -335,7 +448,7 @@ _free_aligned(unsigned char * const ptr, const size_t size)
 }
 
 static unsigned char *
-_unprotected_ptr_from_user_ptr(const void *ptr)
+_unprotected_ptr_from_user_ptr(void * const ptr)
 {
     uintptr_t      unprotected_ptr_u;
     unsigned char *canary_ptr;
@@ -509,17 +622,4 @@ int
 sodium_mprotect_readwrite(void *ptr)
 {
     return _sodium_mprotect(ptr, _mprotect_readwrite);
-}
-
-void
-sodium_increment(unsigned char *n, const size_t nlen)
-{
-    size_t       i;
-    unsigned int c = 1U << 8;
-
-    for (i = (size_t) 0U; i < nlen; i++) {
-        c >>= 8;
-        c += n[i];
-        n[i] = (unsigned char) c;
-    }
 }

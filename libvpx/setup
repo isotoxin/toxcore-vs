@@ -1,0 +1,19 @@
+#!/bin/bash
+
+cd ./libvpx
+
+rm *.dox
+rm *.c
+rm *.cc
+rm *.h
+rm *.mk
+rm *.log
+
+git reset --hard HEAD
+git clean -f
+git pull
+
+
+./configure --target="x86-win32-vs12" --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt
+#x86_64-win64-vs12
+make

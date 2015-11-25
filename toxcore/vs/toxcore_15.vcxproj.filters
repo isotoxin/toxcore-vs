@@ -76,9 +76,6 @@
     <ClCompile Include="..\toxcore\util.c">
       <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="..\toxav\codec.c">
-      <Filter>av</Filter>
-    </ClCompile>
     <ClCompile Include="..\toxav\group.c">
       <Filter>av</Filter>
     </ClCompile>
@@ -97,13 +94,22 @@
     <ClCompile Include="..\toxcore\TCP_connection.c">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="..\toxav\audio.c">
+      <Filter>av</Filter>
+    </ClCompile>
+    <ClCompile Include="..\toxav\bwcontroller.c">
+      <Filter>av</Filter>
+    </ClCompile>
+    <ClCompile Include="..\toxav\toxav_old.c">
+      <Filter>av</Filter>
+    </ClCompile>
+    <ClCompile Include="..\toxav\video.c">
+      <Filter>av</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\toxcore\assoc.h">
       <Filter>core</Filter>
-    </ClInclude>
-    <ClInclude Include="..\toxav\codec.h">
-      <Filter>av</Filter>
     </ClInclude>
     <ClInclude Include="..\toxav\group.h">
       <Filter>av</Filter>
@@ -190,6 +196,15 @@
     </ClInclude>
     <ClInclude Include="..\toxcore\TCP_connection.h">
       <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\toxav\audio.h">
+      <Filter>av</Filter>
+    </ClInclude>
+    <ClInclude Include="..\toxav\bwcontroller.h">
+      <Filter>av</Filter>
+    </ClInclude>
+    <ClInclude Include="..\toxav\video.h">
+      <Filter>av</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -174,6 +174,7 @@ typedef struct {
     uint8_t real_pk[crypto_box_PUBLICKEYBYTES];
     int friendcon_id;
 
+    uint8_t *client_caps;
     uint64_t friendrequest_lastsent; // Time at which the last friend request was sent.
     uint32_t friendrequest_timeout; // The timeout between successful friendrequest sending attempts.
     uint8_t status; // 0 if no friend, 1 if added, 2 if friend request sent, 3 if confirmed friend, 4 if online.
@@ -232,6 +233,8 @@ struct Messenger {
 
     Friend *friendlist;
     uint32_t numfriends;
+
+    uint8_t *client_capabilities; // pointer to static string
 
 #define NUM_SAVED_TCP_RELAYS 8
     uint8_t has_added_relays; // If the first connection has occurred in do_messenger
@@ -449,6 +452,7 @@ int m_copy_self_statusmessage(const Messenger *m, uint8_t *buf);
 uint8_t m_get_userstatus(const Messenger *m, int32_t friendnumber);
 uint8_t m_get_self_userstatus(const Messenger *m);
 
+const uint8_t *m_get_user_clientcaps(const Messenger *m, uint32_t friendnumber);
 
 /* returns timestamp of last time friendnumber was seen online or 0 if never seen.
  * if friendnumber is invalid this function will return UINT64_MAX.
@@ -739,7 +743,7 @@ enum {
  *
  *  if error is not NULL it will be set to one of the values in the enum above.
  */
-Messenger *new_messenger(Messenger_Options *options, unsigned int *error);
+Messenger *new_messenger(const char *client_capabilities, Messenger_Options *options, unsigned int *error);
 
 /* Run this before closing shop
  * Free all datastructures.

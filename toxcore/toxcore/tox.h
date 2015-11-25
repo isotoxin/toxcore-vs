@@ -213,6 +213,10 @@ bool tox_version_is_compatible(uint32_t major, uint32_t minor, uint32_t patch);
  ******************************************************************************/
 
 
+ /**
+  * The size of a client id string in bytes.
+  */
+#define TOX_CLIENT_CAPS_SIZE            1007
 
 /**
  * The size of a Tox Public Key in bytes.
@@ -622,6 +626,17 @@ typedef enum TOX_ERR_NEW {
  * If loading failed or succeeded only partially, the new or partially loaded
  * instance is returned and an error code is set.
  *
+ * @param client_capabilities TOX_CLIENT_CAPS_SIZE bytes max string with client caps.
+ * Application must not free string during Tox instance life time.
+ * Best way - just create static string
+ *   LF separated lines with field:value (almost json, but no quotes)
+ *   example:
+ *      client:isotoxin/0.3.456
+ *      support_bbtags:b,s,u,i
+ *      support_viewsize:1
+ *      support_msg_chain:1
+ *      support_msg_cr_time:1
+ *
  * @param options An options object as described above. If this parameter is
  *   NULL, the default options are used.
  *
@@ -629,7 +644,7 @@ typedef enum TOX_ERR_NEW {
  *
  * @return A new Tox instance pointer on success or NULL on failure.
  */
-Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error);
+Tox *tox_new(const char *client_capabilities, const struct Tox_Options *options, TOX_ERR_NEW *error);
 
 /**
  * Releases all resources associated with the Tox instance and disconnects from
@@ -1324,6 +1339,15 @@ void tox_callback_friend_status_message(Tox *tox, tox_friend_status_message_cb *
  * `friend_status` callback.
  */
 TOX_USER_STATUS tox_friend_get_status(const Tox *tox, uint32_t friend_number, TOX_ERR_FRIEND_QUERY *error);
+
+
+/**
+ * Return the friend's client caps string
+ * see tox_new for caps string format
+ * 
+ * return client caps string or NULL
+ */
+const uint8_t *tox_friend_get_client_caps(const Tox *tox, uint32_t friend_number);
 
 /**
  * @param friend_number The friend number of the friend whose user status

@@ -30,6 +30,10 @@
 #include "LAN_discovery.h"
 #include "onion_client.h"
 
+#ifndef TOX_CLIENT_CAPS_SIZE
+#define TOX_CLIENT_CAPS_SIZE 1007
+#endif
+
 
 #define MAX_FRIEND_CONNECTION_CALLBACKS 2
 #define MESSENGER_CALLBACK_INDEX 0

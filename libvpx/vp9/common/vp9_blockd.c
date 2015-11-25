@@ -59,16 +59,17 @@ void vp9_foreach_transformed_block_in_plane(
       xd->mb_to_right_edge >> (5 + pd->subsampling_x));
   const int max_blocks_high = num_4x4_h + (xd->mb_to_bottom_edge >= 0 ? 0 :
       xd->mb_to_bottom_edge >> (5 + pd->subsampling_y));
+  const int extra_step = ((num_4x4_w - max_blocks_wide) >> tx_size) * step;
 
   // Keep track of the row and column of the blocks we use so that we know
   // if we are in the unrestricted motion border.
   for (r = 0; r < max_blocks_high; r += (1 << tx_size)) {
-    for (c = 0; c < num_4x4_w; c += (1 << tx_size)) {
-      // Skip visiting the sub blocks that are wholly within the UMV.
-      if (c < max_blocks_wide)
-        visit(plane, i, plane_bsize, tx_size, arg);
+    // Skip visiting the sub blocks that are wholly within the UMV.
+    for (c = 0; c < max_blocks_wide; c += (1 << tx_size)) {
+      visit(plane, i, plane_bsize, tx_size, arg);
       i += step;
     }
+    i += extra_step;
   }
 }
 
@@ -103,7 +104,7 @@ void vp9_set_contexts(const MACROBLOCKD *xd, struct macroblockd_plane *pd,
     for (i = above_contexts; i < tx_size_in_blocks; ++i)
       a[i] = 0;
   } else {
-    vpx_memset(a, has_eob, sizeof(ENTROPY_CONTEXT) * tx_size_in_blocks);
+    memset(a, has_eob, sizeof(ENTROPY_CONTEXT) * tx_size_in_blocks);
   }
 
   // left
@@ -120,7 +121,7 @@ void vp9_set_contexts(const MACROBLOCKD *xd, struct macroblockd_plane *pd,
     for (i = left_contexts; i < tx_size_in_blocks; ++i)
       l[i] = 0;
   } else {
-    vpx_memset(l, has_eob, sizeof(ENTROPY_CONTEXT) * tx_size_in_blocks);
+    memset(l, has_eob, sizeof(ENTROPY_CONTEXT) * tx_size_in_blocks);
   }
 }
 
@@ -128,7 +129,6 @@ void vp9_setup_block_planes(MACROBLOCKD *xd, int ss_x, int ss_y) {
   int i;
 
   for (i = 0; i < MAX_MB_PLANE; i++) {
-    xd->plane[i].plane_type = i ? PLANE_TYPE_UV : PLANE_TYPE_Y;
     xd->plane[i].subsampling_x = i ? ss_x : 0;
     xd->plane[i].subsampling_y = i ? ss_y : 0;
   }

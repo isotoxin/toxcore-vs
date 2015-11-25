@@ -101,8 +101,7 @@ typedef enum {
 typedef enum {
   NOT_IN_USE = 0,
   RELAXED_NEIGHBORING_MIN_MAX = 1,
-  CONSTRAIN_NEIGHBORING_MIN_MAX = 2,
-  STRICT_NEIGHBORING_MIN_MAX = 3
+  STRICT_NEIGHBORING_MIN_MAX = 2
 } AUTO_MIN_MAX_MODE;
 
 typedef enum {
@@ -196,6 +195,13 @@ typedef struct MV_SPEED_FEATURES {
   int fullpel_search_step_param;
 } MV_SPEED_FEATURES;
 
+#define MAX_MESH_STEP 4
+
+typedef struct MESH_PATTERN {
+  int range;
+  int interval;
+} MESH_PATTERN;
+
 typedef struct SPEED_FEATURES {
   MV_SPEED_FEATURES mv;
 
@@ -268,10 +274,14 @@ typedef struct SPEED_FEATURES {
 
   // Disable testing non square partitions. (eg 16x32)
   int use_square_partition_only;
+  BLOCK_SIZE use_square_only_threshold;
 
   // Sets min and max partition sizes for this 64x64 region based on the
   // same 64x64 in last encoded frame, and the left and above neighbor.
   AUTO_MIN_MAX_MODE auto_min_max_partition_size;
+  // Ensures the rd based auto partition search will always
+  // go down at least to the specified level.
+  BLOCK_SIZE rd_auto_partition_min_limit;
 
   // Min and max partition size we enable (block_size) as per auto
   // min max, but also used by adjust partitioning, and pick_partitioning.
@@ -295,6 +305,18 @@ typedef struct SPEED_FEATURES {
   // This allows us to use motion search at other sizes as a starting
   // point for this motion search and limits the search range around it.
   int adaptive_motion_search;
+
+  // Flag for allowing some use of exhaustive searches;
+  int allow_exhaustive_searches;
+
+  // Threshold for allowing exhaistive motion search.
+  int exhaustive_searches_thresh;
+
+  // Maximum number of exhaustive searches for a frame.
+  int max_exaustive_pct;
+
+  // Pattern to be used for any exhaustive mesh searches.
+  MESH_PATTERN mesh_patterns[MAX_MESH_STEP];
 
   int schedule_mode_search;
 
@@ -339,6 +361,10 @@ typedef struct SPEED_FEATURES {
   // transform size separately.
   int intra_y_mode_mask[TX_SIZES];
   int intra_uv_mode_mask[TX_SIZES];
+
+  // These bit masks allow you to enable or disable intra modes for each
+  // prediction block size separately.
+  int intra_y_mode_bsize_mask[BLOCK_SIZES];
 
   // This variable enables an early break out of mode testing if the model for
   // rd built from the prediction signal indicates a value that's much
@@ -409,6 +435,9 @@ typedef struct SPEED_FEATURES {
 
   // Allow skipping partition search for still image frame
   int allow_partition_search_skip;
+
+  // Fast approximation of vp9_model_rd_from_var_lapndz
+  int simple_model_rd_from_var;
 } SPEED_FEATURES;
 
 struct VP9_COMP;

@@ -9,10 +9,11 @@
  */
 
 
+#include "./vpx_dsp_rtcd.h"
 #include "./vpx_scale_rtcd.h"
 #include "vp8/common/onyxc_int.h"
 #include "onyx_int.h"
-#include "quantize.h"
+#include "vp8/encoder/quantize.h"
 #include "vpx_mem/vpx_mem.h"
 #include "vpx_scale/vpx_scale.h"
 #include "vp8/common/alloccommon.h"
@@ -49,7 +50,7 @@ static void yv12_copy_partial_frame(YV12_BUFFER_CONFIG *src_ybc,
     src_y = src_ybc->y_buffer + yoffset;
     dst_y = dst_ybc->y_buffer + yoffset;
 
-    vpx_memcpy(dst_y, src_y, ystride * linestocopy);
+    memcpy(dst_y, src_y, ystride * linestocopy);
 }
 
 static int calc_partial_ssl_err(YV12_BUFFER_CONFIG *source,
@@ -83,7 +84,7 @@ static int calc_partial_ssl_err(YV12_BUFFER_CONFIG *source,
         for (j = 0; j < source->y_width; j += 16)
         {
             unsigned int sse;
-            Total += vp8_mse16x16(src + j, source->y_stride,
+            Total += vpx_mse16x16(src + j, source->y_stride,
                                                      dst + j, dest->y_stride,
                                                      &sse);
         }
@@ -286,7 +287,7 @@ void vp8cx_pick_filter_level(YV12_BUFFER_CONFIG *sd, VP8_COMP *cpi)
 
     YV12_BUFFER_CONFIG * saved_frame = cm->frame_to_show;
 
-    vpx_memset(ss_err, 0, sizeof(ss_err));
+    memset(ss_err, 0, sizeof(ss_err));
 
     /* Replace unfiltered frame buffer with a new one */
     cm->frame_to_show = &cpi->pick_lf_lvl_frame;

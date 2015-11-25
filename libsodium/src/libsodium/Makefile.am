@@ -36,7 +36,11 @@ libsodium_la_SOURCES = \
 	crypto_generichash/blake2/ref/api.h \
 	crypto_generichash/blake2/ref/blake2-impl.h \
 	crypto_generichash/blake2/ref/blake2.h \
+	crypto_generichash/blake2/ref/blake2b-compress-ref.c \
+	crypto_generichash/blake2/ref/blake2b-load-sse2.h \
+	crypto_generichash/blake2/ref/blake2b-load-sse41.h \
 	crypto_generichash/blake2/ref/blake2b-ref.c \
+	crypto_generichash/blake2/ref/blake2b-round.h \
 	crypto_generichash/blake2/ref/generichash_blake2b.c \
 	crypto_hash/crypto_hash.c \
 	crypto_hash/sha256/hash_sha256_api.c \
@@ -47,13 +51,11 @@ libsodium_la_SOURCES = \
 	crypto_hash/sha512/cp/hash_sha512.c \
 	crypto_onetimeauth/crypto_onetimeauth.c \
 	crypto_onetimeauth/poly1305/onetimeauth_poly1305.c \
-	crypto_onetimeauth/poly1305/onetimeauth_poly1305_api.c \
-	crypto_onetimeauth/poly1305/onetimeauth_poly1305_try.c \
+	crypto_onetimeauth/poly1305/onetimeauth_poly1305.h \
 	crypto_onetimeauth/poly1305/donna/poly1305_donna.h \
 	crypto_onetimeauth/poly1305/donna/poly1305_donna32.h \
 	crypto_onetimeauth/poly1305/donna/poly1305_donna64.h \
-	crypto_onetimeauth/poly1305/donna/auth_poly1305_donna.c \
-	crypto_onetimeauth/poly1305/donna/verify_poly1305_donna.c \
+	crypto_onetimeauth/poly1305/donna/poly1305_donna.c \
 	crypto_pwhash/scryptsalsa208sha256/crypto_scrypt-common.c \
 	crypto_pwhash/scryptsalsa208sha256/crypto_scrypt.h \
 	crypto_pwhash/scryptsalsa208sha256/scrypt_platform.c \
@@ -62,9 +64,9 @@ libsodium_la_SOURCES = \
 	crypto_pwhash/scryptsalsa208sha256/pwhash_scryptsalsa208sha256.c \
 	crypto_pwhash/scryptsalsa208sha256/sysendian.h \
 	crypto_pwhash/scryptsalsa208sha256/nosse/pwhash_scryptsalsa208sha256_nosse.c \
-	crypto_pwhash/scryptsalsa208sha256/sse/pwhash_scryptsalsa208sha256_sse.c \
 	crypto_scalarmult/crypto_scalarmult.c \
-	crypto_scalarmult/curve25519/scalarmult_curve25519_api.c \
+	crypto_scalarmult/curve25519/scalarmult_curve25519.c \
+	crypto_scalarmult/curve25519/scalarmult_curve25519.h \
 	crypto_secretbox/crypto_secretbox.c \
 	crypto_secretbox/crypto_secretbox_easy.c \
 	crypto_secretbox/xsalsa20poly1305/secretbox_xsalsa20poly1305_api.c \
@@ -171,13 +173,12 @@ endif
 
 if HAVE_TI_MODE
 libsodium_la_SOURCES += \
-	crypto_scalarmult/curve25519/donna_c64/api.h \
-	crypto_scalarmult/curve25519/donna_c64/base_curve25519_donna_c64.c \
-	crypto_scalarmult/curve25519/donna_c64/smult_curve25519_donna_c64.c
+	crypto_scalarmult/curve25519/donna_c64/curve25519_donna_c64.c \
+	crypto_scalarmult/curve25519/donna_c64/curve25519_donna_c64.h
 else
 libsodium_la_SOURCES += \
-	crypto_scalarmult/curve25519/ref10/api.h \
-	crypto_scalarmult/curve25519/ref10/base_curve25519_ref10.c \
+	crypto_scalarmult/curve25519/ref10/curve25519_ref10.c \
+	crypto_scalarmult/curve25519/ref10/curve25519_ref10.h \
 	crypto_scalarmult/curve25519/ref10/fe.h \
 	crypto_scalarmult/curve25519/ref10/fe_0_curve25519_ref10.c \
 	crypto_scalarmult/curve25519/ref10/fe_1_curve25519_ref10.c \
@@ -192,8 +193,32 @@ libsodium_la_SOURCES += \
 	crypto_scalarmult/curve25519/ref10/fe_sub_curve25519_ref10.c \
 	crypto_scalarmult/curve25519/ref10/fe_tobytes_curve25519_ref10.c \
 	crypto_scalarmult/curve25519/ref10/montgomery.h \
-	crypto_scalarmult/curve25519/ref10/pow225521.h \
-	crypto_scalarmult/curve25519/ref10/scalarmult_curve25519_ref10.c
+	crypto_scalarmult/curve25519/ref10/pow225521.h
+endif
+
+noinst_HEADERS = \
+	crypto_scalarmult/curve25519/sandy2x/consts.S \
+	crypto_scalarmult/curve25519/sandy2x/fe51_mul.S \
+	crypto_scalarmult/curve25519/sandy2x/fe51_nsquare.S \
+	crypto_scalarmult/curve25519/sandy2x/fe51_pack.S \
+	crypto_scalarmult/curve25519/sandy2x/ladder.S \
+	crypto_scalarmult/curve25519/sandy2x/ladder_base.S
+
+if HAVE_AVX_ASM
+libsodium_la_SOURCES += \
+	crypto_scalarmult/curve25519/sandy2x/consts_namespace.h \
+	crypto_scalarmult/curve25519/sandy2x/curve25519_sandy2x.c \
+	crypto_scalarmult/curve25519/sandy2x/curve25519_sandy2x.h \
+	crypto_scalarmult/curve25519/sandy2x/fe.h \
+	crypto_scalarmult/curve25519/sandy2x/fe51.h \
+	crypto_scalarmult/curve25519/sandy2x/fe51_invert.c \
+	crypto_scalarmult/curve25519/sandy2x/fe51_namespace.h \
+	crypto_scalarmult/curve25519/sandy2x/fe_frombytes_sandy2x.c \
+	crypto_scalarmult/curve25519/sandy2x/ladder.h \
+	crypto_scalarmult/curve25519/sandy2x/ladder_base.h \
+	crypto_scalarmult/curve25519/sandy2x/ladder_base_namespace.h \
+	crypto_scalarmult/curve25519/sandy2x/ladder_namespace.h \
+	crypto_scalarmult/curve25519/sandy2x/sandy2x.S
 endif
 
 if HAVE_AMD64_ASM
@@ -215,15 +240,7 @@ libsodium_la_SOURCES += \
 	crypto_core/salsa208/ref/core_salsa208.c \
 	crypto_core/salsa208/core_salsa208_api.c \
 	crypto_core/salsa208/ref/api.h \
-	crypto_sign/edwards25519sha512batch/sign_edwards25519sha512batch_api.c \
-	crypto_sign/edwards25519sha512batch/ref/api.h \
-	crypto_sign/edwards25519sha512batch/ref/fe25519.h \
-	crypto_sign/edwards25519sha512batch/ref/fe25519_edwards25519sha512batch.c \
-	crypto_sign/edwards25519sha512batch/ref/ge25519.h \
-	crypto_sign/edwards25519sha512batch/ref/ge25519_edwards25519sha512batch.c \
-	crypto_sign/edwards25519sha512batch/ref/sc25519.h \
-	crypto_sign/edwards25519sha512batch/ref/sc25519_edwards25519sha512batch.c \
-	crypto_sign/edwards25519sha512batch/ref/sign_edwards25519sha512batch.c \
+	crypto_sign/ed25519/ref10/obsolete.c \
 	crypto_stream/aes128ctr/portable/afternm_aes128ctr.c \
 	crypto_stream/aes128ctr/stream_aes128ctr_api.c \
 	crypto_stream/aes128ctr/portable/api.h \
@@ -268,3 +285,32 @@ endif
 
 SUBDIRS = \
 	include
+
+libsodium_la_LIBADD = libaesni.la libsse2.la libssse3.la libsse41.la
+noinst_LTLIBRARIES =  libaesni.la libsse2.la libssse3.la libsse41.la
+
+libaesni_la_LDFLAGS = $(libsodium_la_LDFLAGS)
+libaesni_la_CPPFLAGS = $(libsodium_la_CPPFLAGS) \
+	@CFLAGS_SSSE3@ @CFLAGS_AESNI@ @CFLAGS_PCLMUL@
+libaesni_la_SOURCES = \
+	crypto_aead/aes256gcm/aesni/aead_aes256gcm_aesni.c
+
+libsse2_la_LDFLAGS = $(libsodium_la_LDFLAGS)
+libsse2_la_CPPFLAGS = $(libsodium_la_CPPFLAGS) \
+	@CFLAGS_SSE2@
+libsse2_la_SOURCES = \
+	crypto_pwhash/scryptsalsa208sha256/sse/pwhash_scryptsalsa208sha256_sse.c \
+	crypto_onetimeauth/poly1305/sse2/poly1305_sse2.c \
+	crypto_onetimeauth/poly1305/sse2/poly1305_sse2.h
+
+libssse3_la_LDFLAGS = $(libsodium_la_LDFLAGS)
+libssse3_la_CPPFLAGS = $(libsodium_la_CPPFLAGS) \
+	@CFLAGS_SSE2@ @CFLAGS_SSSE3@
+libssse3_la_SOURCES = \
+	crypto_generichash/blake2/ref/blake2b-compress-ssse3.c
+
+libsse41_la_LDFLAGS = $(libsodium_la_LDFLAGS)
+libsse41_la_CPPFLAGS = $(libsodium_la_CPPFLAGS) \
+	@CFLAGS_SSE2@ @CFLAGS_SSSE3@ @CFLAGS_SSE41@
+libsse41_la_SOURCES = \
+	crypto_generichash/blake2/ref/blake2b-compress-sse41.c

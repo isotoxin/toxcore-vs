@@ -121,7 +121,7 @@ void tox_options_free(struct Tox_Options *options)
     free(options);
 }
 
-Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
+Tox *tox_new(const char *client_capabilities, const struct Tox_Options *options, TOX_ERR_NEW *error)
 {
     if (!logger_get_global())
         logger_set_global(logger_new(LOGGER_OUTPUT_FILE, LOGGER_LEVEL, "toxcore"));
@@ -207,7 +207,7 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
     }
 
     unsigned int m_error;
-    Messenger *m = new_messenger(&m_options, &m_error);
+    Messenger *m = new_messenger(client_capabilities, &m_options, &m_error);
 
     if (!new_groupchats(m)) {
         kill_messenger(m);
@@ -773,6 +773,12 @@ TOX_USER_STATUS tox_friend_get_status(const Tox *tox, uint32_t friend_number, TO
 
     SET_ERROR_PARAMETER(error, TOX_ERR_FRIEND_QUERY_OK);
     return ret;
+}
+
+const uint8_t *tox_friend_get_client_caps(const Tox *tox, uint32_t friend_number)
+{
+    const Messenger *m = tox;
+    return m_get_user_clientcaps(m, friend_number);
 }
 
 void tox_callback_friend_status(Tox *tox, tox_friend_status_cb *function, void *user_data)
