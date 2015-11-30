@@ -2325,6 +2325,24 @@ uint16_t tox_self_get_udp_port(const Tox *tox, TOX_ERR_GET_PORT *error);
  */
 uint16_t tox_self_get_tcp_port(const Tox *tox, TOX_ERR_GET_PORT *error);
 
+
+
+
+/**
+ * @param friend_number The friend number of the friend
+ *   return new len
+ */
+typedef uint32_t tox_friend_cryptpacket_before_send_cb(Tox *tox, uint32_t friend_number, uint8_t *packet, 
+        uint32_t len, uint32_t max_len, void *user_data);
+
+
+/**
+ * custom hacking packet
+ */
+void tox_callback_cryptpacket_before_send(Tox *tox, tox_friend_cryptpacket_before_send_cb *callback, void *user_data);
+
+
+
 #include "tox_old.h"
 
 #ifdef __cplusplus

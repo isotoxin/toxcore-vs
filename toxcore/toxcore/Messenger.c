@@ -841,6 +841,12 @@ void m_callback_connectionstatus(Messenger *m, void (*function)(Messenger *m, ui
     m->friend_connectionstatuschange_userdata = userdata;
 }
 
+void m_cryptpacket_before_send(Messenger *m, uint32_t(*function)(Messenger *m, uint32_t, uint8_t *packet, uint32_t, uint32_t, void *), void *userdata)
+{
+    m->friend_cryptpacketbeforesend = function;
+    m->friend_cryptpacketbeforesend_userdata = userdata;
+}
+
 void m_callback_core_connection(Messenger *m, void (*function)(Messenger *m, unsigned int, void *), void *userdata)
 {
     m->core_connection_change = function;
@@ -924,11 +930,19 @@ static int write_cryptpacket_id(const Messenger *m, int32_t friendnumber, uint8_
     if (length >= MAX_CRYPTO_DATA_SIZE || m->friendlist[friendnumber].status != FRIEND_ONLINE)
         return 0;
 
-    DYNAMIC( uint8_t, packet, length + 1 ); // -C99
+    uint8_t packet[MAX_CRYPTO_DATA_SIZE];
     packet[0] = packet_id;
 
     if (length != 0)
         memcpy(packet + 1, data, length);
+
+    if (m->friend_cryptpacketbeforesend)
+    {
+        uint32_t newlen = m->friend_cryptpacketbeforesend(m,friendnumber, packet, length + 1, MAX_CRYPTO_DATA_SIZE, m->friend_cryptpacketbeforesend_userdata);
+        if (newlen > MAX_CRYPTO_DATA_SIZE)
+            newlen = MAX_CRYPTO_DATA_SIZE;
+        length = newlen-1;
+    }
 
     return write_cryptpacket(m->net_crypto, friend_connection_crypt_connection_id(m->fr_c,
                              m->friendlist[friendnumber].friendcon_id), packet, length + 1, congestion_control) != -1;

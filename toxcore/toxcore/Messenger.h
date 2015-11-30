@@ -256,6 +256,8 @@ struct Messenger {
     void *friend_connectionstatuschange_userdata;
     void (*friend_connectionstatuschange_internal)(struct Messenger *m, uint32_t, uint8_t, void *);
     void *friend_connectionstatuschange_internal_userdata;
+    uint32_t(*friend_cryptpacketbeforesend)(struct Messenger *m, uint32_t, uint8_t *packet, uint32_t, uint32_t, void *);
+    void *friend_cryptpacketbeforesend_userdata;
 
     void *group_chat_object; /* Set by new_groupchats()*/
     void (*group_invite)(struct Messenger *m, uint32_t, const uint8_t *, uint16_t);
@@ -545,6 +547,8 @@ void m_callback_connectionstatus_internal_av(Messenger *m, void (*function)(Mess
  *  Function(unsigned int connection_status (0 = not connected, 1 = TCP only, 2 = UDP + TCP))
  */
 void m_callback_core_connection(Messenger *m, void (*function)(Messenger *m, unsigned int, void *), void *userdata);
+
+void m_cryptpacket_before_send(Messenger *m, uint32_t(*function)(Messenger *m, uint32_t, uint8_t *packet, uint32_t, uint32_t, void *), void *user_data);
 
 /**********GROUP CHATS************/
 

@@ -808,6 +808,13 @@ void tox_callback_friend_connection_status(Tox *tox, tox_friend_connection_statu
     m_callback_connectionstatus(m, function, user_data);
 }
 
+void tox_callback_cryptpacket_before_send(Tox *tox, tox_friend_cryptpacket_before_send_cb *callback, void *user_data)
+{
+    Messenger *m = tox;
+    m_cryptpacket_before_send(m, callback, user_data);
+}
+
+
 bool tox_friend_get_typing(const Tox *tox, uint32_t friend_number, TOX_ERR_FRIEND_QUERY *error)
 {
     const Messenger *m = tox;
