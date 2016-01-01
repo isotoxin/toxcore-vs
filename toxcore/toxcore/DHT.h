@@ -38,7 +38,7 @@
 #define MAX_SENT_NODES 4
 
 /* Ping timeout in seconds */
-#define PING_TIMEOUT 3
+#define PING_TIMEOUT 5
 
 /* size of DHT ping arrays. */
 #define DHT_PING_ARRAY_SIZE 512
@@ -231,6 +231,9 @@ typedef struct {
     uint64_t       last_run;
 
     Cryptopacket_Handles cryptopackethandlers[256];
+
+    Node_format to_bootstrap[MAX_SENT_NODES];
+    unsigned int num_to_bootstrap;
 } DHT;
 /*----------------------------------------------------------------------------------*/
 
@@ -298,6 +301,11 @@ int DHT_getfriendip(const DHT *dht, const uint8_t *public_key, IP_Port *ip_port)
  *  return 2 if pk2 is closer.
  */
 int id_closest(const uint8_t *pk, const uint8_t *pk1, const uint8_t *pk2);
+
+/* Add node to the node list making sure only the nodes closest to cmp_pk are in the list.
+ */
+_Bool add_to_list(Node_format *nodes_list, unsigned int length, const uint8_t *pk, IP_Port ip_port,
+                  const uint8_t *cmp_pk);
 
 /* Get the (maximum MAX_SENT_NODES) closest nodes to public_key we know
  * and put them in nodes_list (must be MAX_SENT_NODES big).
