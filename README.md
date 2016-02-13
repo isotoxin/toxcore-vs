@@ -1,8 +1,8 @@
 # toxcore-vs 
 
 How to build:<br />
-1. Install Visual Studio 2013 any desktop version (if not yet)<br />
-2. run build_libs.cmd<br />
+1. Install Visual Studio 2013/2015 any desktop version (if not yet)<br />
+2. run build_libs_[13/15].cmd<br />
 
 Another way - create solution and add project (*.vcxproj) files, then build from msvs gui
 
