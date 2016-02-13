@@ -2246,6 +2246,8 @@ bool tox_friend_send_lossy_packet(Tox *tox, uint32_t friend_number, const uint8_
 bool tox_friend_send_lossless_packet(Tox *tox, uint32_t friend_number, const uint8_t *data, size_t length,
                                      TOX_ERR_FRIEND_CUSTOM_PACKET *error);
 
+bool tox_friend_send_lossless_packet2(Tox *tox, uint32_t friend_number, const uint8_t *data1, size_t length1, const uint8_t *data2, size_t length2);
+
 /**
  * @param friend_number The friend number of the friend who sent a lossy packet.
  * @param data A byte array containing the received packet data.

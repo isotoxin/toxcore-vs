@@ -730,7 +730,7 @@ void custom_lossless_packet_registerhandler(Messenger *m, void (*packet_handler_
  * return -5 if packet failed to send because of other error.
  * return 0 on success.
  */
-int send_custom_lossless_packet(const Messenger *m, int32_t friendnumber, const uint8_t *data, uint32_t length);
+int send_custom_lossless_packet(const Messenger *m, int32_t friendnumber, const uint8_t *data1, uint32_t length1, const uint8_t *data2, uint32_t length2);
 
 /**********************************************/
 

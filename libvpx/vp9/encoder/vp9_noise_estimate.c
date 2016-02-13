@@ -25,7 +25,7 @@ void vp9_noise_estimate_init(NOISE_ESTIMATE *const ne,
                              int width,
                              int height) {
   ne->enabled = 0;
-  ne->level = kLow;
+  ne->level = kLowLow;
   ne->value = 0;
   ne->count = 0;
   ne->thresh = 90;
@@ -66,6 +66,7 @@ int enable_noise_estimation(VP9_COMP *const cpi) {
     return 0;
 }
 
+#if CONFIG_VP9_TEMPORAL_DENOISING
 static void copy_frame(YV12_BUFFER_CONFIG * const dest,
                        const YV12_BUFFER_CONFIG * const src) {
   int r;
@@ -80,6 +81,22 @@ static void copy_frame(YV12_BUFFER_CONFIG * const dest,
     destbuf += dest->y_stride;
     srcbuf += src->y_stride;
   }
+}
+#endif  // CONFIG_VP9_TEMPORAL_DENOISING
+
+NOISE_LEVEL vp9_noise_estimate_extract_level(NOISE_ESTIMATE *const ne) {
+  int noise_level = kLowLow;
+  if (ne->value > (ne->thresh << 1)) {
+    noise_level = kHigh;
+  } else {
+    if (ne->value > ne->thresh)
+      noise_level = kMedium;
+    else if (ne->value > (ne->thresh >> 1))
+      noise_level = kLow;
+    else
+      noise_level = kLowLow;
+  }
+  return noise_level;
 }
 
 void vp9_update_noise_estimate(VP9_COMP *const cpi) {
@@ -130,10 +147,6 @@ void vp9_update_noise_estimate(VP9_COMP *const cpi) {
     const uint8_t *src_u = cpi->Source->u_buffer;
     const uint8_t *src_v = cpi->Source->v_buffer;
     const int src_uvstride = cpi->Source->uv_stride;
-    const int y_width_shift = (4 << b_width_log2_lookup[bsize]) >> 1;
-    const int y_height_shift = (4 << b_height_log2_lookup[bsize]) >> 1;
-    const int uv_width_shift = y_width_shift >> 1;
-    const int uv_height_shift = y_height_shift >> 1;
     int mi_row, mi_col;
     int num_low_motion = 0;
     int frame_low_motion = 1;
@@ -149,7 +162,9 @@ void vp9_update_noise_estimate(VP9_COMP *const cpi) {
     for (mi_row = 0; mi_row < cm->mi_rows; mi_row++) {
       for (mi_col = 0; mi_col < cm->mi_cols; mi_col++) {
         // 16x16 blocks, 1/4 sample of frame.
-        if (mi_row % 4 == 0 && mi_col % 4 == 0) {
+        if (mi_row % 4 == 0 && mi_col % 4 == 0 &&
+            mi_row < cm->mi_rows - 1 &&
+            mi_col < cm->mi_cols - 1) {
           int bl_index = mi_row * cm->mi_cols + mi_col;
           int bl_index1 = bl_index + 1;
           int bl_index2 = bl_index + cm->mi_cols;
@@ -158,13 +173,12 @@ void vp9_update_noise_estimate(VP9_COMP *const cpi) {
           // been encoded as zero/low motion x (= thresh_consec_zeromv) frames
           // in a row. consec_zero_mv[] defined for 8x8 blocks, so consider all
           // 4 sub-blocks for 16x16 block. Also, avoid skin blocks.
-          const uint8_t ysource =
-            src_y[y_height_shift * src_ystride + y_width_shift];
-          const uint8_t usource =
-            src_u[uv_height_shift * src_uvstride + uv_width_shift];
-          const uint8_t vsource =
-            src_v[uv_height_shift * src_uvstride + uv_width_shift];
-          int is_skin = vp9_skin_pixel(ysource, usource, vsource);
+          int is_skin = vp9_compute_skin_block(src_y,
+                                               src_u,
+                                               src_v,
+                                               src_ystride,
+                                               src_uvstride,
+                                               bsize);
           if (frame_low_motion &&
               cr->consec_zero_mv[bl_index] > thresh_consec_zeromv &&
               cr->consec_zero_mv[bl_index1] > thresh_consec_zeromv &&
@@ -220,22 +234,16 @@ void vp9_update_noise_estimate(VP9_COMP *const cpi) {
         // Reset counter and check noise level condition.
         ne->num_frames_estimate = 30;
         ne->count = 0;
-        if (ne->value > (ne->thresh << 1))
-          ne->level = kHigh;
-        else
-          if (ne->value > ne->thresh)
-            ne->level = kMedium;
-          else if (ne->value > (ne->thresh >> 1))
-            ne->level = kLow;
-          else
-            ne->level = kLowLow;
+        ne->level = vp9_noise_estimate_extract_level(ne);
+#if CONFIG_VP9_TEMPORAL_DENOISING
+        if (cpi->oxcf.noise_sensitivity > 0)
+          vp9_denoiser_set_noise_level(&cpi->denoiser, ne->level);
+#endif
       }
     }
   }
 #if CONFIG_VP9_TEMPORAL_DENOISING
-  if (cpi->oxcf.noise_sensitivity > 0) {
+  if (cpi->oxcf.noise_sensitivity > 0)
     copy_frame(&cpi->denoiser.last_source, cpi->Source);
-    vp9_denoiser_set_noise_level(&cpi->denoiser, ne->level);
-  }
 #endif
 }

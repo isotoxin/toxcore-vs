@@ -1234,7 +1234,7 @@ bool tox_friend_send_lossless_packet(Tox *tox, uint32_t friend_number, const uin
         return 0;
     }
 
-    int ret = send_custom_lossless_packet(m, friend_number, data, length);
+    int ret = send_custom_lossless_packet(m, friend_number, data, length, 0, 0);
 
     set_custom_packet_error(ret, error);
 
@@ -1243,6 +1243,12 @@ bool tox_friend_send_lossless_packet(Tox *tox, uint32_t friend_number, const uin
     } else {
         return 0;
     }
+}
+
+bool tox_friend_send_lossless_packet2(Tox *tox, uint32_t friend_number, const uint8_t *data1, size_t length1, const uint8_t *data2, size_t length2)
+{
+    Messenger *m = tox;
+    return 0 == send_custom_lossless_packet(m, friend_number, data1, length1, data2, length2);
 }
 
 void tox_callback_friend_lossless_packet(Tox *tox, tox_friend_lossless_packet_cb *function, void *user_data)

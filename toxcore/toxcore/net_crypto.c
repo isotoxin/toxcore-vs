@@ -915,10 +915,10 @@ static int reset_max_speed_reached(Net_Crypto *c, int crypt_connection_id)
 /*  return -1 if data could not be put in packet queue.
  *  return positive packet number if data was put into the queue.
  */
-static int64_t send_lossless_packet(Net_Crypto *c, int crypt_connection_id, const uint8_t *data, uint16_t length,
+static int64_t send_lossless_packet(Net_Crypto *c, int crypt_connection_id, const uint8_t *data1, uint16_t length1, const uint8_t *data2, uint16_t length2,
                                     uint8_t congestion_control)
 {
-    if (length == 0 || length > MAX_CRYPTO_DATA_SIZE)
+    if (length1 + length2 == 0 || length1 + length2 > MAX_CRYPTO_DATA_SIZE)
         return -1;
 
     Crypto_Connection *conn = get_crypto_connection(c, crypt_connection_id);
@@ -936,8 +936,10 @@ static int64_t send_lossless_packet(Net_Crypto *c, int crypt_connection_id, cons
 
     Packet_Data dt;
     dt.sent_time = 0;
-    dt.length = length;
-    memcpy(dt.data, data, length);
+    dt.length = length1 + length2;
+    memcpy(dt.data, data1, length1);
+    if (data2) memcpy(dt.data + length1, data2, length2);
+
     pthread_mutex_lock(&conn->mutex);
     int64_t packet_num = add_data_end_of_buffer(&conn->send_array, &dt);
     pthread_mutex_unlock(&conn->mutex);
@@ -949,7 +951,7 @@ static int64_t send_lossless_packet(Net_Crypto *c, int crypt_connection_id, cons
         return packet_num;
     }
 
-    if (send_data_packet_helper(c, crypt_connection_id, conn->recv_array.buffer_start, packet_num, data, length) == 0) {
+    if (send_data_packet_helper(c, crypt_connection_id, conn->recv_array.buffer_start, packet_num, dt.data, dt.length) == 0) {
         Packet_Data *dt1 = NULL;
 
         if (get_data_pointer(&conn->send_array, &dt1, packet_num) == 1)
@@ -2400,16 +2402,16 @@ uint32_t crypto_num_free_sendqueue_slots(const Net_Crypto *c, int crypt_connecti
  *
  * congestion_control: should congestion control apply to this packet?
  */
-int64_t write_cryptpacket(Net_Crypto *c, int crypt_connection_id, const uint8_t *data, uint16_t length,
+int64_t write_cryptpacket2(Net_Crypto *c, int crypt_connection_id, const uint8_t *data1, uint16_t length1, const uint8_t *data2, uint16_t length2,
                           uint8_t congestion_control)
 {
-    if (length == 0)
+    if (length1 + length2 == 0)
         return -1;
 
-    if (data[0] < CRYPTO_RESERVED_PACKETS)
+    if (data1[0] < CRYPTO_RESERVED_PACKETS)
         return -1;
 
-    if (data[0] >= PACKET_ID_LOSSY_RANGE_START)
+    if (data1[0] >= PACKET_ID_LOSSY_RANGE_START)
         return -1;
 
     Crypto_Connection *conn = get_crypto_connection(c, crypt_connection_id);
@@ -2423,7 +2425,7 @@ int64_t write_cryptpacket(Net_Crypto *c, int crypt_connection_id, const uint8_t 
     if (congestion_control && conn->packets_left == 0)
         return -1;
 
-    int64_t ret = send_lossless_packet(c, crypt_connection_id, data, length, congestion_control);
+    int64_t ret = send_lossless_packet(c, crypt_connection_id, data1, length1, data2, length2, congestion_control);
 
     if (ret == -1)
         return -1;

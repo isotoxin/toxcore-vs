@@ -14,17 +14,17 @@ ALL_TARGETS += solution
 
 PREFIX=/usr/local
 ifeq ($(MAKECMDGOALS),dist)
-DIST_DIR?=vpx-vp8-vp9-nodocs-x86-win32mt-vs12-v1.5.0-110-g204cde5
+DIST_DIR?=vpx-vp8-vp9-nodocs-x86-win32mt-vs12-v1.5.0-451-gf032c7e
 else
 DIST_DIR?=$(DESTDIR)/usr/local
 endif
 LIBSUBDIR=lib
 
-VERSION_STRING=v1.5.0-110-g204cde5
+VERSION_STRING=v1.5.0-451-gf032c7e
 
 VERSION_MAJOR=1
 VERSION_MINOR=5
 VERSION_PATCH=0
 
-CONFIGURE_ARGS=--target=x86-win32-vs12 --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt
-CONFIGURE_ARGS?=--target=x86-win32-vs12 --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt
+CONFIGURE_ARGS=--target=x86-win32-vs12 --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt --enable-vp9-temporal-denoising --enable-vp9-postproc --enable-realtime-only
+CONFIGURE_ARGS?=--target=x86-win32-vs12 --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt --enable-vp9-temporal-denoising --enable-vp9-postproc --enable-realtime-only

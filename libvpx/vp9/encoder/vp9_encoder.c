@@ -36,6 +36,7 @@
 #include "vp9/common/vp9_reconintra.h"
 #include "vp9/common/vp9_tile_common.h"
 
+#include "vp9/encoder/vp9_aq_360.h"
 #include "vp9/encoder/vp9_aq_complexity.h"
 #include "vp9/encoder/vp9_aq_cyclicrefresh.h"
 #include "vp9/encoder/vp9_aq_variance.h"
@@ -60,8 +61,6 @@
 
 #define AM_SEGMENT_ID_INACTIVE 7
 #define AM_SEGMENT_ID_ACTIVE 0
-
-#define SHARP_FILTER_QTHRESH 0          /* Q threshold for 8-tap sharp filter */
 
 #define ALTREF_HIGH_PRECISION_MV 1      // Whether to use high precision mv
                                          //  for altref computation.
@@ -608,7 +607,7 @@ static void update_reference_segmentation_map(VP9_COMP *cpi) {
     MODE_INFO **mi_8x8 = mi_8x8_ptr;
     uint8_t *cache = cache_ptr;
     for (col = 0; col < cm->mi_cols; col++, mi_8x8++, cache++)
-      cache[0] = mi_8x8[0]->mbmi.segment_id;
+      cache[0] = mi_8x8[0]->segment_id;
     mi_8x8_ptr += cm->mi_stride;
     cache_ptr += cm->mi_cols;
   }
@@ -1478,7 +1477,11 @@ void vp9_change_config(struct VP9_COMP *cpi, const VP9EncoderConfig *oxcf) {
   cpi->td.mb.e_mbd.bd = (int)cm->bit_depth;
 #endif  // CONFIG_VP9_HIGHBITDEPTH
 
-  rc->baseline_gf_interval = (MIN_GF_INTERVAL + MAX_GF_INTERVAL) / 2;
+  if ((oxcf->pass == 0) && (oxcf->rc_mode == VPX_Q)) {
+    rc->baseline_gf_interval = FIXED_GF_INTERVAL;
+  } else {
+    rc->baseline_gf_interval = (MIN_GF_INTERVAL + MAX_GF_INTERVAL) / 2;
+  }
 
   cpi->refresh_golden_frame = 0;
   cpi->refresh_last_frame = 1;
@@ -1536,6 +1539,10 @@ void vp9_change_config(struct VP9_COMP *cpi, const VP9EncoderConfig *oxcf) {
     }
   }
   update_frame_size(cpi);
+
+  if ((last_w != cpi->oxcf.width || last_h != cpi->oxcf.height) &&
+      cpi->oxcf.aq_mode == CYCLIC_REFRESH_AQ)
+    vp9_cyclic_refresh_reset_resize(cpi);
 
   if ((cpi->svc.number_temporal_layers > 1 &&
       cpi->oxcf.rc_mode == VPX_CBR) ||
@@ -1666,6 +1673,7 @@ VP9_COMP *vp9_create_compressor(VP9EncoderConfig *oxcf,
   cpi->resize_state = 0;
   cpi->resize_avg_qp = 0;
   cpi->resize_buffer_underflow = 0;
+  cpi->use_skin_detection = 0;
   cpi->common.buffer_pool = pool;
 
   cpi->rc.high_source_sad = 0;
@@ -1961,11 +1969,14 @@ VP9_COMP *vp9_create_compressor(VP9EncoderConfig *oxcf,
 
   return cpi;
 }
+
+#if CONFIG_INTERNAL_STATS
 #define SNPRINT(H, T) \
   snprintf((H) + strlen(H), sizeof(H) - strlen(H), (T))
 
 #define SNPRINT2(H, T, V) \
   snprintf((H) + strlen(H), sizeof(H) - strlen(H), (T), (V))
+#endif  // CONFIG_INTERNAL_STATS
 
 void vp9_remove_compressor(VP9_COMP *cpi) {
   VP9_COMMON *cm;
@@ -2607,10 +2618,6 @@ static void scale_and_extend_frame_nonnormative(const YV12_BUFFER_CONFIG *src,
 #if CONFIG_VP9_HIGHBITDEPTH
 static void scale_and_extend_frame(const YV12_BUFFER_CONFIG *src,
                                    YV12_BUFFER_CONFIG *dst, int bd) {
-#else
-static void scale_and_extend_frame(const YV12_BUFFER_CONFIG *src,
-                                   YV12_BUFFER_CONFIG *dst) {
-#endif  // CONFIG_VP9_HIGHBITDEPTH
   const int src_w = src->y_crop_width;
   const int src_h = src->y_crop_height;
   const int dst_w = dst->y_crop_width;
@@ -2622,19 +2629,18 @@ static void scale_and_extend_frame(const YV12_BUFFER_CONFIG *src,
   const InterpKernel *const kernel = vp9_filter_kernels[EIGHTTAP];
   int x, y, i;
 
-  for (y = 0; y < dst_h; y += 16) {
-    for (x = 0; x < dst_w; x += 16) {
-      for (i = 0; i < MAX_MB_PLANE; ++i) {
-        const int factor = (i == 0 || i == 3 ? 1 : 2);
+  for (i = 0; i < MAX_MB_PLANE; ++i) {
+    const int factor = (i == 0 || i == 3 ? 1 : 2);
+    const int src_stride = src_strides[i];
+    const int dst_stride = dst_strides[i];
+    for (y = 0; y < dst_h; y += 16) {
+      const int y_q4 = y * (16 / factor) * src_h / dst_h;
+      for (x = 0; x < dst_w; x += 16) {
         const int x_q4 = x * (16 / factor) * src_w / dst_w;
-        const int y_q4 = y * (16 / factor) * src_h / dst_h;
-        const int src_stride = src_strides[i];
-        const int dst_stride = dst_strides[i];
         const uint8_t *src_ptr = srcs[i] + (y / factor) * src_h / dst_h *
-                                     src_stride + (x / factor) * src_w / dst_w;
+                                   src_stride + (x / factor) * src_w / dst_w;
         uint8_t *dst_ptr = dsts[i] + (y / factor) * dst_stride + (x / factor);
 
-#if CONFIG_VP9_HIGHBITDEPTH
         if (src->flags & YV12_FLAG_HIGHBITDEPTH) {
           vpx_highbd_convolve8(src_ptr, src_stride, dst_ptr, dst_stride,
                                kernel[x_q4 & 0xf], 16 * src_w / dst_w,
@@ -2646,18 +2652,49 @@ static void scale_and_extend_frame(const YV12_BUFFER_CONFIG *src,
                         kernel[y_q4 & 0xf], 16 * src_h / dst_h,
                         16 / factor, 16 / factor);
         }
-#else
-        vpx_scaled_2d(src_ptr, src_stride, dst_ptr, dst_stride,
-                      kernel[x_q4 & 0xf], 16 * src_w / dst_w,
-                      kernel[y_q4 & 0xf], 16 * src_h / dst_h,
-                      16 / factor, 16 / factor);
-#endif  // CONFIG_VP9_HIGHBITDEPTH
       }
     }
   }
 
   vpx_extend_frame_borders(dst);
 }
+#else
+void vp9_scale_and_extend_frame_c(const YV12_BUFFER_CONFIG *src,
+                                  YV12_BUFFER_CONFIG *dst) {
+  const int src_w = src->y_crop_width;
+  const int src_h = src->y_crop_height;
+  const int dst_w = dst->y_crop_width;
+  const int dst_h = dst->y_crop_height;
+  const uint8_t *const srcs[3] = {src->y_buffer, src->u_buffer, src->v_buffer};
+  const int src_strides[3] = {src->y_stride, src->uv_stride, src->uv_stride};
+  uint8_t *const dsts[3] = {dst->y_buffer, dst->u_buffer, dst->v_buffer};
+  const int dst_strides[3] = {dst->y_stride, dst->uv_stride, dst->uv_stride};
+  const InterpKernel *const kernel = vp9_filter_kernels[EIGHTTAP];
+  int x, y, i;
+
+  for (i = 0; i < MAX_MB_PLANE; ++i) {
+    const int factor = (i == 0 || i == 3 ? 1 : 2);
+    const int src_stride = src_strides[i];
+    const int dst_stride = dst_strides[i];
+    for (y = 0; y < dst_h; y += 16) {
+      const int y_q4 = y * (16 / factor) * src_h / dst_h;
+      for (x = 0; x < dst_w; x += 16) {
+        const int x_q4 = x * (16 / factor) * src_w / dst_w;
+        const uint8_t *src_ptr = srcs[i] + (y / factor) * src_h / dst_h *
+                                   src_stride + (x / factor) * src_w / dst_w;
+        uint8_t *dst_ptr = dsts[i] + (y / factor) * dst_stride + (x / factor);
+
+        vpx_scaled_2d(src_ptr, src_stride, dst_ptr, dst_stride,
+                      kernel[x_q4 & 0xf], 16 * src_w / dst_w,
+                      kernel[y_q4 & 0xf], 16 * src_h / dst_h,
+                      16 / factor, 16 / factor);
+      }
+    }
+  }
+
+  vpx_extend_frame_borders(dst);
+}
+#endif  // CONFIG_VP9_HIGHBITDEPTH
 
 static int scale_down(VP9_COMP *cpi, int q) {
   RATE_CONTROL *const rc = &cpi->rc;
@@ -2793,6 +2830,22 @@ void vp9_update_reference_frames(VP9_COMP *cpi) {
                                    cpi->resize_pending);
   }
 #endif
+  if (is_one_pass_cbr_svc(cpi)) {
+    // Keep track of frame index for each reference frame.
+    SVC *const svc = &cpi->svc;
+    if (cm->frame_type == KEY_FRAME) {
+      svc->ref_frame_index[cpi->lst_fb_idx] = svc->current_superframe;
+      svc->ref_frame_index[cpi->gld_fb_idx] = svc->current_superframe;
+      svc->ref_frame_index[cpi->alt_fb_idx] = svc->current_superframe;
+    } else {
+      if (cpi->refresh_last_frame)
+        svc->ref_frame_index[cpi->lst_fb_idx] = svc->current_superframe;
+      if (cpi->refresh_golden_frame)
+        svc->ref_frame_index[cpi->gld_fb_idx] = svc->current_superframe;
+      if (cpi->refresh_alt_ref_frame)
+        svc->ref_frame_index[cpi->alt_fb_idx] = svc->current_superframe;
+    }
+  }
 }
 
 static void loopfilter_frame(VP9_COMP *cpi, VP9_COMMON *cm) {
@@ -2801,6 +2854,7 @@ static void loopfilter_frame(VP9_COMP *cpi, VP9_COMMON *cm) {
 
   if (xd->lossless) {
       lf->filter_level = 0;
+      lf->last_filt_level = 0;
   } else {
     struct vpx_usec_timer timer;
 
@@ -2808,7 +2862,16 @@ static void loopfilter_frame(VP9_COMP *cpi, VP9_COMMON *cm) {
 
     vpx_usec_timer_start(&timer);
 
-    vp9_pick_filter_level(cpi->Source, cpi, cpi->sf.lpf_pick);
+    if (!cpi->rc.is_src_frame_alt_ref) {
+      if ((cpi->common.frame_type == KEY_FRAME) &&
+          (!cpi->rc.this_key_frame_forced)) {
+        lf->last_filt_level = 0;
+      }
+      vp9_pick_filter_level(cpi->Source, cpi, cpi->sf.lpf_pick);
+      lf->last_filt_level = lf->filter_level;
+    } else {
+      lf->filter_level = 0;
+    }
 
     vpx_usec_timer_mark(&timer);
     cpi->time_pick_lpf += vpx_usec_timer_elapsed(&timer);
@@ -2906,14 +2969,25 @@ void vp9_scale_references(VP9_COMP *cpi) {
                                    cm->subsampling_x, cm->subsampling_y,
                                    VP9_ENC_BORDER_IN_PIXELS, cm->byte_alignment,
                                    NULL, NULL, NULL);
-          scale_and_extend_frame(ref, &new_fb_ptr->buf);
+          vp9_scale_and_extend_frame(ref, &new_fb_ptr->buf);
           cpi->scaled_ref_idx[ref_frame - 1] = new_fb;
           alloc_frame_mvs(cm, new_fb);
         }
 #endif  // CONFIG_VP9_HIGHBITDEPTH
       } else {
-        const int buf_idx = get_ref_frame_buf_idx(cpi, ref_frame);
-        RefCntBuffer *const buf = &pool->frame_bufs[buf_idx];
+        int buf_idx;
+        RefCntBuffer *buf = NULL;
+        if (cpi->oxcf.pass == 0 && !cpi->use_svc) {
+          // Check for release of scaled reference.
+          buf_idx = cpi->scaled_ref_idx[ref_frame - 1];
+          buf = (buf_idx != INVALID_IDX) ? &pool->frame_bufs[buf_idx] : NULL;
+          if (buf != NULL) {
+            --buf->ref_count;
+            cpi->scaled_ref_idx[ref_frame - 1] = INVALID_IDX;
+          }
+        }
+        buf_idx = get_ref_frame_buf_idx(cpi, ref_frame);
+        buf = &pool->frame_bufs[buf_idx];
         buf->buf.y_crop_width = ref->y_crop_width;
         buf->buf.y_crop_height = ref->y_crop_height;
         cpi->scaled_ref_idx[ref_frame - 1] = buf_idx;
@@ -3001,7 +3075,7 @@ static void output_frame_level_debug_stats(VP9_COMP *cpi) {
        "%7.2lf %7.2lf %7.2lf %7.2lf %7.2lf"
         "%6d %6d %5d %5d %5d "
         "%10"PRId64" %10.3lf"
-        "%10lf %8u %10"PRId64" %10d %10d %10d\n",
+        "%10lf %8u %10"PRId64" %10d %10d %10d %10d\n",
         cpi->common.current_video_frame,
         cm->width, cm->height,
         cpi->td.rd_counts.m_search_count,
@@ -3033,7 +3107,8 @@ static void output_frame_level_debug_stats(VP9_COMP *cpi) {
             (1 + cpi->twopass.total_left_stats.coded_error),
         cpi->tot_recode_hits, recon_err, cpi->rc.kf_boost,
         cpi->twopass.kf_zeromotion_pct,
-        cpi->twopass.fr_content_type);
+        cpi->twopass.fr_content_type,
+        cm->lf.filter_level);
 
   fclose(f);
 
@@ -3109,7 +3184,7 @@ static void set_size_dependent_vars(VP9_COMP *cpi, int *q,
   if (oxcf->pass == 2 && cpi->sf.static_segmentation)
     configure_static_seg_features(cpi);
 
-#if CONFIG_VP9_POSTPROC
+#if CONFIG_VP9_POSTPROC && !(CONFIG_VP9_TEMPORAL_DENOISING)
   if (oxcf->noise_sensitivity > 0) {
     int l = 0;
     switch (oxcf->noise_sensitivity) {
@@ -3269,7 +3344,6 @@ static void encode_without_recode_loop(VP9_COMP *cpi,
   vpx_clear_system_state();
 
   set_frame_size(cpi);
-
   cpi->Source = vp9_scale_if_required(cm,
                                       cpi->un_scaled_source,
                                       &cpi->scaled_source,
@@ -3287,7 +3361,6 @@ static void encode_without_recode_loop(VP9_COMP *cpi,
                                              cpi->unscaled_last_source,
                                              &cpi->scaled_last_source,
                                              (cpi->oxcf.pass == 0));
-
   vp9_update_noise_estimate(cpi);
 
   if (cpi->oxcf.pass == 0 &&
@@ -3297,12 +3370,25 @@ static void encode_without_recode_loop(VP9_COMP *cpi,
       cpi->oxcf.content == VP9E_CONTENT_SCREEN)
     vp9_avg_source_sad(cpi);
 
+  // TODO(wonkap/marpan): For 1 pass SVC, since only ZERMOV is allowed for
+  // upsampled reference frame (i.e, svc->force_zero_mode_spatial_ref = 0),
+  // we should be able to avoid this frame-level upsampling.
+  // Keeping it for now as there is an asan error in the multi-threaded SVC
+  // rate control test if this upsampling is removed.
   if (frame_is_intra_only(cm) == 0) {
     vp9_scale_references(cpi);
   }
 
   set_size_independent_vars(cpi);
   set_size_dependent_vars(cpi, &q, &bottom_index, &top_index);
+
+  if (cpi->oxcf.speed >= 5 &&
+      cpi->oxcf.pass == 0 &&
+      cpi->oxcf.rc_mode == VPX_CBR &&
+      cpi->oxcf.content != VP9E_CONTENT_SCREEN &&
+      cpi->oxcf.aq_mode == CYCLIC_REFRESH_AQ) {
+    cpi->use_skin_detection = 1;
+  }
 
   vp9_set_quantizer(cm, q);
   vp9_set_variance_partition_thresholds(cpi, q);
@@ -3314,6 +3400,8 @@ static void encode_without_recode_loop(VP9_COMP *cpi,
   // exclusive.
   if (cpi->oxcf.aq_mode == VARIANCE_AQ) {
     vp9_vaq_frame_setup(cpi);
+  } else if (cpi->oxcf.aq_mode == EQUATOR360_AQ) {
+    vp9_360aq_frame_setup(cpi);
   } else if (cpi->oxcf.aq_mode == COMPLEXITY_AQ) {
     vp9_setup_in_frame_q_adj(cpi);
   } else if (cpi->oxcf.aq_mode == CYCLIC_REFRESH_AQ) {
@@ -3444,6 +3532,8 @@ static void encode_with_recode_loop(VP9_COMP *cpi,
     // exclusive.
     if (cpi->oxcf.aq_mode == VARIANCE_AQ) {
       vp9_vaq_frame_setup(cpi);
+    } else if (cpi->oxcf.aq_mode == EQUATOR360_AQ) {
+      vp9_360aq_frame_setup(cpi);
     } else if (cpi->oxcf.aq_mode == COMPLEXITY_AQ) {
       vp9_setup_in_frame_q_adj(cpi);
     }
@@ -3682,13 +3772,17 @@ YV12_BUFFER_CONFIG *vp9_scale_if_required(VP9_COMMON *cm,
   if (cm->mi_cols * MI_SIZE != unscaled->y_width ||
       cm->mi_rows * MI_SIZE != unscaled->y_height) {
 #if CONFIG_VP9_HIGHBITDEPTH
-    if (use_normative_scaler)
+    if (use_normative_scaler &&
+        unscaled->y_width <= (scaled->y_width << 1) &&
+        unscaled->y_height <= (scaled->y_height << 1))
       scale_and_extend_frame(unscaled, scaled, (int)cm->bit_depth);
     else
       scale_and_extend_frame_nonnormative(unscaled, scaled, (int)cm->bit_depth);
 #else
-    if (use_normative_scaler)
-      scale_and_extend_frame(unscaled, scaled);
+    if (use_normative_scaler &&
+        unscaled->y_width <= (scaled->y_width << 1) &&
+        unscaled->y_height <= (scaled->y_height << 1))
+      vp9_scale_and_extend_frame(unscaled, scaled);
     else
       scale_and_extend_frame_nonnormative(unscaled, scaled);
 #endif  // CONFIG_VP9_HIGHBITDEPTH
@@ -4062,7 +4156,7 @@ int vp9_receive_raw_frame(VP9_COMP *cpi, unsigned int frame_flags,
   const int subsampling_x = sd->subsampling_x;
   const int subsampling_y = sd->subsampling_y;
 #if CONFIG_VP9_HIGHBITDEPTH
-  const int use_highbitdepth = sd->flags & YV12_FLAG_HIGHBITDEPTH;
+  const int use_highbitdepth = (sd->flags & YV12_FLAG_HIGHBITDEPTH) != 0;
   check_initial_width(cpi, use_highbitdepth, subsampling_x, subsampling_y);
 #else
   check_initial_width(cpi, subsampling_x, subsampling_y);
@@ -4283,7 +4377,7 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
       cpi->svc.layer_context[cpi->svc.spatial_layer_id].has_alt_frame = 1;
 #endif
 
-      if (oxcf->arnr_max_frames > 0) {
+      if ((oxcf->arnr_max_frames > 0) && (oxcf->arnr_strength > 0)) {
         // Produce the filtered ARF frame.
         vp9_temporal_filter(cpi, arf_src_index);
         vpx_extend_frame_borders(&cpi->alt_ref_buffer);

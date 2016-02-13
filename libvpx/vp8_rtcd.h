@@ -263,10 +263,6 @@ void vp8_sixtap_predict8x8_sse2(unsigned char *src, int src_pitch, int xofst, in
 void vp8_sixtap_predict8x8_ssse3(unsigned char *src, int src_pitch, int xofst, int yofst, unsigned char *dst, int dst_pitch);
 RTCD_EXTERN void (*vp8_sixtap_predict8x8)(unsigned char *src, int src_pitch, int xofst, int yofst, unsigned char *dst, int dst_pitch);
 
-void vp8_temporal_filter_apply_c(unsigned char *frame1, unsigned int stride, unsigned char *frame2, unsigned int block_size, int strength, int filter_weight, unsigned int *accumulator, unsigned short *count);
-void vp8_temporal_filter_apply_sse2(unsigned char *frame1, unsigned int stride, unsigned char *frame2, unsigned int block_size, int strength, int filter_weight, unsigned int *accumulator, unsigned short *count);
-RTCD_EXTERN void (*vp8_temporal_filter_apply)(unsigned char *frame1, unsigned int stride, unsigned char *frame2, unsigned int block_size, int strength, int filter_weight, unsigned int *accumulator, unsigned short *count);
-
 void vp8_rtcd(void);
 
 #ifdef RTCD_C
@@ -405,8 +401,6 @@ static void setup_rtcd_internal(void)
     if (flags & HAS_MMX) vp8_sixtap_predict8x8 = vp8_sixtap_predict8x8_mmx;
     if (flags & HAS_SSE2) vp8_sixtap_predict8x8 = vp8_sixtap_predict8x8_sse2;
     if (flags & HAS_SSSE3) vp8_sixtap_predict8x8 = vp8_sixtap_predict8x8_ssse3;
-    vp8_temporal_filter_apply = vp8_temporal_filter_apply_c;
-    if (flags & HAS_SSE2) vp8_temporal_filter_apply = vp8_temporal_filter_apply_sse2;
 }
 #endif
 

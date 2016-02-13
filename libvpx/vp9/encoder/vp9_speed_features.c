@@ -380,16 +380,6 @@ static void set_rt_speed_feature(VP9_COMP *cpi, SPEED_FEATURES *sf,
     sf->adaptive_rd_thresh = 2;
     // This feature is only enabled when partition search is disabled.
     sf->reuse_inter_pred_sby = 1;
-    // TODO(marpan): When denoising, we may re-evaluate the mode selection and
-    // this seems to cause problems when reuse_inter_pred_sby is enabled.
-    // Disabling reuse_inter_pred_sby for now (under denoising conditions), and
-    // will look into re-enabling it.
-#if CONFIG_VP9_TEMPORAL_DENOISING
-    if (cpi->oxcf.noise_sensitivity > 0 &&
-        cpi->noise_estimate.enabled &&
-        cpi->noise_estimate.level > kLow)
-      sf->reuse_inter_pred_sby = 0;
-#endif
     sf->partition_search_breakout_rate_thr = 200;
     sf->coeff_prob_appx_step = 4;
     sf->use_fast_coef_updates = is_keyframe ? TWO_LOOP : ONE_LOOP_REDUCED;
@@ -404,12 +394,15 @@ static void set_rt_speed_feature(VP9_COMP *cpi, SPEED_FEATURES *sf,
           sf->intra_y_mode_bsize_mask[i] = INTRA_DC_TM_H_V;
       } else {
         for (i = 0; i < BLOCK_SIZES; ++i)
-          if (i >= BLOCK_16X16)
+          if (i > BLOCK_16X16)
             sf->intra_y_mode_bsize_mask[i] = INTRA_DC;
           else
             // Use H and V intra mode for block sizes <= 16X16.
             sf->intra_y_mode_bsize_mask[i] = INTRA_DC_H_V;
       }
+    }
+    if (content == VP9E_CONTENT_SCREEN) {
+      sf->short_circuit_flat_blocks = 1;
     }
   }
 
@@ -544,6 +537,7 @@ void vp9_set_speed_features_framesize_independent(VP9_COMP *cpi) {
   sf->recode_tolerance = 25;
   sf->default_interp_filter = SWITCHABLE;
   sf->simple_model_rd_from_var = 0;
+  sf->short_circuit_flat_blocks = 0;
 
   // Some speed-up features even for best quality as minimal impact on quality.
   sf->adaptive_rd_thresh = 1;

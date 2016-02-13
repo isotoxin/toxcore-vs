@@ -6,5 +6,5 @@
 /* in the file PATENTS.  All contributing project authors may */
 /* be found in the AUTHORS file in the root of the source tree. */
 #include "vpx/vpx_codec.h"
-static const char* const cfg = "--target=x86-win32-vs12 --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt";
+static const char* const cfg = "--target=x86-win32-vs12 --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt --enable-vp9-temporal-denoising --enable-vp9-postproc --enable-realtime-only";
 const char *vpx_codec_build_config(void) {return cfg;}

@@ -319,8 +319,11 @@ _Bool max_speed_reached(Net_Crypto *c, int crypt_connection_id);
  *
  * congestion_control: should congestion control apply to this packet?
  */
-int64_t write_cryptpacket(Net_Crypto *c, int crypt_connection_id, const uint8_t *data, uint16_t length,
+int64_t write_cryptpacket2(Net_Crypto *c, int crypt_connection_id, const uint8_t *data1, uint16_t length1, const uint8_t *data2, uint16_t length2,
                           uint8_t congestion_control);
+_inline int64_t write_cryptpacket(Net_Crypto *c, int crypt_connection_id, const uint8_t *data, uint16_t length, uint8_t congestion_control) {
+    return write_cryptpacket2(c,crypt_connection_id,data,length,0,0,congestion_control);
+}
 
 /* Check if packet_number was received by the other side.
  *
