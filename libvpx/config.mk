@@ -14,13 +14,13 @@ ALL_TARGETS += solution
 
 PREFIX=/usr/local
 ifeq ($(MAKECMDGOALS),dist)
-DIST_DIR?=vpx-vp8-vp9-nodocs-x86-win32mt-vs12-v1.5.0-451-gf032c7e
+DIST_DIR?=vpx-vp8-vp9-nodocs-x86-win32mt-vs12-v1.5.0-521-g958f372
 else
 DIST_DIR?=$(DESTDIR)/usr/local
 endif
 LIBSUBDIR=lib
 
-VERSION_STRING=v1.5.0-451-gf032c7e
+VERSION_STRING=v1.5.0-521-g958f372
 
 VERSION_MAJOR=1
 VERSION_MINOR=5

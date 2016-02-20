@@ -306,6 +306,7 @@ static int frame_worker_hook(void *arg1, void *arg2) {
     // Check decode result in serial decode.
     frame_worker_data->pbi->cur_buf->buf.corrupted = 1;
     frame_worker_data->pbi->need_resync = 1;
+    frame_worker_data->data_end = data + frame_worker_data->data_size; // !!!!!!!! setup data_end
   }
   return !frame_worker_data->result;
 }

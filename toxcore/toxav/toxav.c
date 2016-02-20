@@ -106,24 +106,28 @@ void call_kill_transmission(ToxAVCall *call);
 
 uint32_t toxav_version_major(void)
 {
-    return 0;
+    return TOXAV_VERSION_MAJOR;
 }
+
 uint32_t toxav_version_minor(void)
 {
-    return 0;
+    return TOXAV_VERSION_MINOR;
 }
+
 uint32_t toxav_version_patch(void)
 {
-    return 0;
+    return TOXAV_VERSION_PATCH;
 }
+
 bool toxav_version_is_compatible(uint32_t major, uint32_t minor, uint32_t patch)
 {
-    (void)major;
-    (void)minor;
-    (void)patch;
-
-    return 1;
+  return (TOXAV_VERSION_MAJOR == major && /* Force the major version */
+            (TOXAV_VERSION_MINOR > minor || /* Current minor version must be newer than requested  -- or -- */
+                (TOXAV_VERSION_MINOR == minor && TOXAV_VERSION_PATCH >= patch) /* the patch must be the same or newer */
+            )
+         );
 }
+
 ToxAV *toxav_new(Tox *tox, TOXAV_ERR_NEW *error)
 {
     TOXAV_ERR_NEW rc = TOXAV_ERR_NEW_OK;
@@ -788,7 +792,7 @@ bool toxav_video_send_frame(ToxAV *av, uint32_t friend_number, uint16_t width, u
             y,u,v,NULL, width,width/2,width/2,width, 12 };
 
         int vrc = vpx_codec_encode(call->video.second->encoder, &img,
-                                   call->video.second->frame_counter, 1, 0, MAX_ENCODE_TIME_US);
+                                   call->video.second->frame_counter, 1, 0, /*MAX_ENCODE_TIME_US*/ 0 /* looks like non 0 values dramaticaly decrease encoding quality */);
 
         if (vrc != VPX_CODEC_OK) {
             pthread_mutex_unlock(call->mutex_video);

@@ -14,6 +14,6 @@ git clean -f
 git pull
 
 
-./configure --target="x86-win32-vs12" --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt
+./configure --target="x86-win32-vs12" --enable-vp8 --enable-vp9 --enable-libyuv --enable-static-msvcrt --enable-vp9-temporal-denoising --enable-vp9-postproc --enable-realtime-only
 #x86_64-win64-vs12
 make
