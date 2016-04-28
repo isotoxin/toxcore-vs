@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -23,7 +23,7 @@
     <ProjectName>opus</ProjectName>
     <ProjectGuid>{219EC965-228A-1824-174D-96449D05F88A}</ProjectGuid>
   </PropertyGroup>
-  <Import Project="$(SolutionDir)\libs.common.15.props" />
+  <Import Project="$(SolutionDir)\libs.common.2013.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
@@ -58,8 +58,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IntDir>$(GARBAGE)\#garbage\vc15\$(ProjectName)\$(Configuration)\</IntDir>
-    <OutDir>$(GARBAGE)\#libs\vc15\$(Configuration)\</OutDir>
+    <IntDir>$(GARBAGE)\#garbage\vc13\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(GARBAGE)\#libs\vc13\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>

@@ -16,7 +16,7 @@
     <RootNamespace>libsodium</RootNamespace>
     <ProjectName>libsodium</ProjectName>
   </PropertyGroup>
-  <Import Project="$(SolutionDir)\libs.common.15.props" />
+  <Import Project="$(SolutionDir)\libs.common.2015.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>

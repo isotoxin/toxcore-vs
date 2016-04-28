@@ -6,7 +6,7 @@
     <RootNamespace>libvpx</RootNamespace>
     <ProjectName>libvpx</ProjectName>
   </PropertyGroup>
-  <Import Project="$(SolutionDir)\libs.common.13.props" />
+  <Import Project="$(SolutionDir)\libs.common.2013.props" />
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
