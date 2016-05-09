@@ -375,6 +375,9 @@ static void dealloc_compressor_data(VP9_COMP *cpi) {
   vpx_free(cpi->active_map.map);
   cpi->active_map.map = NULL;
 
+  vpx_free(cpi->consec_zero_mv);
+  cpi->consec_zero_mv = NULL;
+
   vp9_free_ref_frame_buffers(cm->buffer_pool);
 #if CONFIG_VP9_POSTPROC
   vp9_free_postproc_buffers(cm);
@@ -409,6 +412,9 @@ static void dealloc_compressor_data(VP9_COMP *cpi) {
   }
   memset(&cpi->svc.scaled_frames[0], 0,
          MAX_LAG_BUFFERS * sizeof(cpi->svc.scaled_frames[0]));
+
+  vpx_free_frame_buffer(&cpi->svc.scaled_temp);
+  memset(&cpi->svc.scaled_temp, 0, sizeof(cpi->svc.scaled_temp));
 
   vpx_free_frame_buffer(&cpi->svc.empty_frame.img);
   memset(&cpi->svc.empty_frame, 0, sizeof(cpi->svc.empty_frame));
@@ -1546,9 +1552,12 @@ void vp9_change_config(struct VP9_COMP *cpi, const VP9EncoderConfig *oxcf) {
 
   update_frame_size(cpi);
 
-  if ((last_w != cpi->oxcf.width || last_h != cpi->oxcf.height) &&
-      cpi->oxcf.aq_mode == CYCLIC_REFRESH_AQ)
-    vp9_cyclic_refresh_reset_resize(cpi);
+  if (last_w != cpi->oxcf.width || last_h != cpi->oxcf.height) {
+    memset(cpi->consec_zero_mv, 0,
+               cm->mi_rows * cm->mi_cols * sizeof(*cpi->consec_zero_mv));
+    if (cpi->oxcf.aq_mode == CYCLIC_REFRESH_AQ)
+      vp9_cyclic_refresh_reset_resize(cpi);
+  }
 
   if ((cpi->svc.number_temporal_layers > 1 &&
       cpi->oxcf.rc_mode == VPX_CBR) ||
@@ -1684,6 +1693,7 @@ VP9_COMP *vp9_create_compressor(VP9EncoderConfig *oxcf,
   cpi->common.buffer_pool = pool;
 
   cpi->rc.high_source_sad = 0;
+  cpi->rc.count_last_scene_change = 0;
 
   init_config(cpi, oxcf);
   vp9_rc_init(&cpi->oxcf, oxcf->pass, &cpi->rc);
@@ -1693,6 +1703,10 @@ VP9_COMP *vp9_create_compressor(VP9EncoderConfig *oxcf,
   cpi->tile_data = NULL;
 
   realloc_segmentation_maps(cpi);
+
+  CHECK_MEM_ERROR(cm, cpi->consec_zero_mv,
+                  vpx_calloc(cm->mi_rows * cm->mi_cols,
+                             sizeof(*cpi->consec_zero_mv)));
 
   CHECK_MEM_ERROR(cm, cpi->nmvcosts[0],
                   vpx_calloc(MV_VALS, sizeof(*cpi->nmvcosts[0])));
@@ -2719,6 +2733,13 @@ static int scale_down(VP9_COMP *cpi, int q) {
   return scale;
 }
 
+static int big_rate_miss(VP9_COMP *cpi, int high_limit, int low_limit) {
+  const RATE_CONTROL *const rc = &cpi->rc;
+
+  return (rc->projected_frame_size > ((high_limit * 3) / 2)) ||
+         (rc->projected_frame_size < (low_limit / 2));
+}
+
 // Function to test for conditions that indicate we should loop
 // back and recode a frame.
 static int recode_loop_test(VP9_COMP *cpi,
@@ -2730,6 +2751,7 @@ static int recode_loop_test(VP9_COMP *cpi,
   int force_recode = 0;
 
   if ((rc->projected_frame_size >= rc->max_frame_bandwidth) ||
+      big_rate_miss(cpi, high_limit, low_limit) ||
       (cpi->sf.recode_loop == ALLOW_RECODE) ||
       (frame_is_kfgfarf &&
        (cpi->sf.recode_loop == ALLOW_RECODE_KFARFGF))) {
@@ -2828,7 +2850,8 @@ void vp9_update_reference_frames(VP9_COMP *cpi) {
              sizeof(cpi->interp_filter_selected[0]));
   }
 #if CONFIG_VP9_TEMPORAL_DENOISING
-  if (cpi->oxcf.noise_sensitivity > 0) {
+  if (cpi->oxcf.noise_sensitivity > 0 &&
+      cpi->denoiser.denoising_level > kDenLowLow) {
     vp9_denoiser_update_frame_info(&cpi->denoiser,
                                    *cpi->Source,
                                    cpi->common.frame_type,
@@ -3076,16 +3099,45 @@ static void output_frame_level_debug_stats(VP9_COMP *cpi) {
 
   vpx_clear_system_state();
 
+#if CONFIG_VP9_HIGHBITDEPTH
+  if (cm->use_highbitdepth) {
+    recon_err = vp9_highbd_get_y_sse(cpi->Source, get_frame_new_buffer(cm));
+  } else {
+    recon_err = vp9_get_y_sse(cpi->Source, get_frame_new_buffer(cm));
+  }
+#else
   recon_err = vp9_get_y_sse(cpi->Source, get_frame_new_buffer(cm));
+#endif  // CONFIG_VP9_HIGHBITDEPTH
 
-  if (cpi->twopass.total_left_stats.coded_error != 0.0)
+
+  if (cpi->twopass.total_left_stats.coded_error != 0.0) {
+    double dc_quant_devisor;
+#if CONFIG_VP9_HIGHBITDEPTH
+    switch (cm->bit_depth) {
+      case VPX_BITS_8:
+        dc_quant_devisor = 4.0;
+        break;
+      case VPX_BITS_10:
+        dc_quant_devisor = 16.0;
+        break;
+      case VPX_BITS_12:
+        dc_quant_devisor = 64.0;
+        break;
+      default:
+        assert(0 && "bit_depth must be VPX_BITS_8, VPX_BITS_10 or VPX_BITS_12");
+        break;
+    }
+#else
+    dc_quant_devisor = 4.0;
+#endif
+
     fprintf(f, "%10u %dx%d %10d %10d %d %d %10d %10d %10d %10d"
        "%10"PRId64" %10"PRId64" %5d %5d %10"PRId64" "
        "%10"PRId64" %10"PRId64" %10d "
        "%7.2lf %7.2lf %7.2lf %7.2lf %7.2lf"
         "%6d %6d %5d %5d %5d "
         "%10"PRId64" %10.3lf"
-        "%10lf %8u %10"PRId64" %10d %10d %10d %10d\n",
+        "%10lf %8u %10"PRId64" %10d %10d %10d %10d %10d\n",
         cpi->common.current_video_frame,
         cm->width, cm->height,
         cpi->td.rd_counts.m_search_count,
@@ -3104,7 +3156,8 @@ static void output_frame_level_debug_stats(VP9_COMP *cpi) {
         (cpi->rc.starting_buffer_level - cpi->rc.bits_off_target),
         cpi->rc.total_actual_bits, cm->base_qindex,
         vp9_convert_qindex_to_q(cm->base_qindex, cm->bit_depth),
-        (double)vp9_dc_quant(cm->base_qindex, 0, cm->bit_depth) / 4.0,
+        (double)vp9_dc_quant(cm->base_qindex, 0, cm->bit_depth) /
+            dc_quant_devisor,
         vp9_convert_qindex_to_q(cpi->twopass.active_worst_quality,
                                 cm->bit_depth),
         cpi->rc.avg_q,
@@ -3118,8 +3171,9 @@ static void output_frame_level_debug_stats(VP9_COMP *cpi) {
         cpi->tot_recode_hits, recon_err, cpi->rc.kf_boost,
         cpi->twopass.kf_zeromotion_pct,
         cpi->twopass.fr_content_type,
-        cm->lf.filter_level);
-
+        cm->lf.filter_level,
+        cm->seg.aq_av_offset);
+  }
   fclose(f);
 
   if (0) {
@@ -3357,11 +3411,22 @@ static void encode_without_recode_loop(VP9_COMP *cpi,
   vpx_clear_system_state();
 
   set_frame_size(cpi);
-  cpi->Source = vp9_scale_if_required(cm,
-                                      cpi->un_scaled_source,
-                                      &cpi->scaled_source,
-                                      (cpi->oxcf.pass == 0));
 
+  if (is_one_pass_cbr_svc(cpi) &&
+      cpi->un_scaled_source->y_width == cm->width << 2 &&
+      cpi->un_scaled_source->y_height == cm->height << 2 &&
+      cpi->svc.scaled_temp.y_width == cm->width << 1 &&
+      cpi->svc.scaled_temp.y_height == cm->height << 1) {
+    cpi->Source = vp9_svc_twostage_scale(cm,
+                                         cpi->un_scaled_source,
+                                         &cpi->scaled_source,
+                                         &cpi->svc.scaled_temp);
+  } else {
+    cpi->Source = vp9_scale_if_required(cm,
+                                        cpi->un_scaled_source,
+                                        &cpi->scaled_source,
+                                        (cpi->oxcf.pass == 0));
+  }
   // Avoid scaling last_source unless its needed.
   // Last source is needed if vp9_avg_source_sad() is used, or if
   // partition_search_type == SOURCE_VAR_BASED_PARTITION, or if noise
@@ -3376,6 +3441,12 @@ static void encode_without_recode_loop(VP9_COMP *cpi,
                                              cpi->unscaled_last_source,
                                              &cpi->scaled_last_source,
                                              (cpi->oxcf.pass == 0));
+
+  if (cm->frame_type == KEY_FRAME || cpi->resize_pending != 0) {
+    memset(cpi->consec_zero_mv, 0,
+           cm->mi_rows * cm->mi_cols * sizeof(*cpi->consec_zero_mv));
+  }
+
   vp9_update_noise_estimate(cpi);
 
   if (cpi->oxcf.pass == 0 &&
@@ -3387,12 +3458,10 @@ static void encode_without_recode_loop(VP9_COMP *cpi,
        cpi->oxcf.rc_mode == VPX_VBR))
     vp9_avg_source_sad(cpi);
 
-  // TODO(wonkap/marpan): For 1 pass SVC, since only ZERMOV is allowed for
-  // upsampled reference frame (i.e, svc->force_zero_mode_spatial_ref = 0),
-  // we should be able to avoid this frame-level upsampling.
-  // Keeping it for now as there is an asan error in the multi-threaded SVC
-  // rate control test if this upsampling is removed.
-  if (frame_is_intra_only(cm) == 0) {
+  // For 1 pass SVC, since only ZEROMV is allowed for upsampled reference
+  // frame (i.e, svc->force_zero_mode_spatial_ref = 0), we can avoid this
+  // frame-level upsampling.
+  if (frame_is_intra_only(cm) == 0 && !is_one_pass_cbr_svc(cpi)) {
     vp9_scale_references(cpi);
   }
 
@@ -3782,6 +3851,25 @@ static void set_ext_overrides(VP9_COMP *cpi) {
   }
 }
 
+YV12_BUFFER_CONFIG *vp9_svc_twostage_scale(VP9_COMMON *cm,
+                                           YV12_BUFFER_CONFIG *unscaled,
+                                           YV12_BUFFER_CONFIG *scaled,
+                                           YV12_BUFFER_CONFIG *scaled_temp) {
+  if (cm->mi_cols * MI_SIZE != unscaled->y_width ||
+      cm->mi_rows * MI_SIZE != unscaled->y_height) {
+#if CONFIG_VP9_HIGHBITDEPTH
+    scale_and_extend_frame(unscaled, scaled_temp, (int)cm->bit_depth);
+    scale_and_extend_frame(scaled_temp, scaled, (int)cm->bit_depth);
+#else
+    vp9_scale_and_extend_frame(unscaled, scaled_temp);
+    vp9_scale_and_extend_frame(scaled_temp, scaled);
+#endif  // CONFIG_VP9_HIGHBITDEPTH
+    return scaled;
+  } else {
+    return unscaled;
+  }
+}
+
 YV12_BUFFER_CONFIG *vp9_scale_if_required(VP9_COMMON *cm,
                                           YV12_BUFFER_CONFIG *unscaled,
                                           YV12_BUFFER_CONFIG *scaled,
@@ -3952,6 +4040,12 @@ static void encode_frame_to_data_rate(VP9_COMP *cpi,
       ++cm->current_video_frame;
       cpi->ext_refresh_frame_flags_pending = 0;
       cpi->svc.rc_drop_superframe = 1;
+      // TODO(marpan): Advancing the svc counters on dropped frames can break
+      // the referencing scheme for the fixed svc patterns defined in
+      // vp9_one_pass_cbr_svc_start_layer(). Look into fixing this issue, but
+      // for now, don't advance the svc frame counters on dropped frame.
+      // if (cpi->use_svc)
+      //   vp9_inc_frame_in_layer(cpi);
       return;
     }
   }
@@ -4376,6 +4470,20 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
   // Skip alt frame if we encode the empty frame
   if (is_two_pass_svc(cpi) && source != NULL)
     arf_src_index = 0;
+
+  if (arf_src_index) {
+    for (i = 0; i <= arf_src_index; ++i) {
+      struct lookahead_entry *e = vp9_lookahead_peek(cpi->lookahead, i);
+      // Avoid creating an alt-ref if there's a forced keyframe pending.
+      if (e == NULL) {
+        break;
+      } else if (e->flags == VPX_EFLAG_FORCE_KF) {
+        arf_src_index = 0;
+        flush = 1;
+        break;
+      }
+    }
+  }
 
   if (arf_src_index) {
     assert(arf_src_index <= rc->frames_to_key);

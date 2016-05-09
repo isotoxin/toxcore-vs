@@ -23,7 +23,6 @@
 
 CYCLIC_REFRESH *vp9_cyclic_refresh_alloc(int mi_rows, int mi_cols) {
   size_t last_coded_q_map_size;
-  size_t consec_zero_mv_size;
   CYCLIC_REFRESH *const cr = vpx_calloc(1, sizeof(*cr));
   if (cr == NULL)
     return NULL;
@@ -41,21 +40,12 @@ CYCLIC_REFRESH *vp9_cyclic_refresh_alloc(int mi_rows, int mi_cols) {
   }
   assert(MAXQ <= 255);
   memset(cr->last_coded_q_map, MAXQ, last_coded_q_map_size);
-
-  consec_zero_mv_size = mi_rows * mi_cols * sizeof(*cr->consec_zero_mv);
-  cr->consec_zero_mv = vpx_malloc(consec_zero_mv_size);
-  if (cr->consec_zero_mv == NULL) {
-    vp9_cyclic_refresh_free(cr);
-    return NULL;
-  }
-  memset(cr->consec_zero_mv, 0, consec_zero_mv_size);
   return cr;
 }
 
 void vp9_cyclic_refresh_free(CYCLIC_REFRESH *cr) {
   vpx_free(cr->map);
   vpx_free(cr->last_coded_q_map);
-  vpx_free(cr->consec_zero_mv);
   vpx_free(cr);
 }
 
@@ -193,10 +183,15 @@ void vp9_cyclic_refresh_update_segment(VP9_COMP *const cpi,
                                      p[2].src.buf,
                                      p[0].src.stride,
                                      p[1].src.stride,
-                                     bsize);
+                                     bsize,
+                                     0,
+                                     0);
     if (is_skin)
       refresh_this_block = 1;
   }
+
+  if (cpi->oxcf.rc_mode == VPX_VBR && mi->ref_frame[0] == GOLDEN_FRAME)
+    refresh_this_block = 0;
 
   // If this block is labeled for refresh, check if we should reset the
   // segment_id.
@@ -240,7 +235,6 @@ void vp9_cyclic_refresh_update_sb_postencode(VP9_COMP *const cpi,
                                              BLOCK_SIZE bsize) {
   const VP9_COMMON *const cm = &cpi->common;
   CYCLIC_REFRESH *const cr = cpi->cyclic_refresh;
-  MV mv = mi->mv[0].as_mv;
   const int bw = num_8x8_blocks_wide_lookup[bsize];
   const int bh = num_8x8_blocks_high_lookup[bsize];
   const int xmis = VPXMIN(cm->mi_cols - mi_col, bw);
@@ -264,15 +258,8 @@ void vp9_cyclic_refresh_update_sb_postencode(VP9_COMP *const cpi,
             clamp(cm->base_qindex + cr->qindex_delta[mi->segment_id],
                   0, MAXQ),
             cr->last_coded_q_map[map_offset]);
-      // Update the consecutive zero/low_mv count.
-      if (is_inter_block(mi) && (abs(mv.row) < 8 && abs(mv.col) < 8)) {
-        if (cr->consec_zero_mv[map_offset] < 255)
-          cr->consec_zero_mv[map_offset]++;
-      } else {
-        cr->consec_zero_mv[map_offset] = 0;
       }
     }
-  }
 }
 
 // Update the actual number of blocks that were applied the segment delta q.
@@ -305,6 +292,8 @@ void vp9_cyclic_refresh_set_golden_update(VP9_COMP *const cpi) {
     rc->baseline_gf_interval = VPXMIN(4 * (100 / cr->percent_refresh), 40);
   else
     rc->baseline_gf_interval = 40;
+  if (cpi->oxcf.rc_mode == VPX_VBR)
+    rc->baseline_gf_interval = 20;
 }
 
 // Update some encoding stats (from the just encoded frame). If this frame's
@@ -317,42 +306,40 @@ void vp9_cyclic_refresh_check_golden_update(VP9_COMP *const cpi) {
   int mi_row, mi_col;
   double fraction_low = 0.0;
   int low_content_frame = 0;
-
   MODE_INFO **mi = cm->mi_grid_visible;
   RATE_CONTROL *const rc = &cpi->rc;
   const int rows = cm->mi_rows, cols = cm->mi_cols;
   int cnt1 = 0, cnt2 = 0;
   int force_gf_refresh = 0;
-
+  int flag_force_gf_high_motion = 0;
   for (mi_row = 0; mi_row < rows; mi_row++) {
     for (mi_col = 0; mi_col < cols; mi_col++) {
-      int16_t abs_mvr = mi[0]->mv[0].as_mv.row >= 0 ?
-          mi[0]->mv[0].as_mv.row : -1 * mi[0]->mv[0].as_mv.row;
-      int16_t abs_mvc = mi[0]->mv[0].as_mv.col >= 0 ?
-          mi[0]->mv[0].as_mv.col : -1 * mi[0]->mv[0].as_mv.col;
-
-      // Calculate the motion of the background.
-      if (abs_mvr <= 16 && abs_mvc <= 16) {
-        cnt1++;
-        if (abs_mvr == 0 && abs_mvc == 0)
-          cnt2++;
+      if (flag_force_gf_high_motion == 1) {
+        int16_t abs_mvr = mi[0]->mv[0].as_mv.row >= 0 ?
+            mi[0]->mv[0].as_mv.row : -1 * mi[0]->mv[0].as_mv.row;
+        int16_t abs_mvc = mi[0]->mv[0].as_mv.col >= 0 ?
+            mi[0]->mv[0].as_mv.col : -1 * mi[0]->mv[0].as_mv.col;
+        // Calculate the motion of the background.
+        if (abs_mvr <= 16 && abs_mvc <= 16) {
+          cnt1++;
+          if (abs_mvr == 0 && abs_mvc == 0)
+            cnt2++;
+        }
       }
       mi++;
-
       // Accumulate low_content_frame.
       if (cr->map[mi_row * cols + mi_col] < 1)
         low_content_frame++;
     }
     mi += 8;
   }
-
   // For video conference clips, if the background has high motion in current
   // frame because of the camera movement, set this frame as the golden frame.
   // Use 70% and 5% as the thresholds for golden frame refreshing.
   // Also, force this frame as a golden update frame if this frame will change
   // the resolution (resize_pending != 0).
   if (cpi->resize_pending != 0 ||
-     (cnt1 * 10 > (70 * rows * cols) && cnt2 * 20 < cnt1)) {
+     (cnt1 * 100 > (70 * rows * cols) && cnt2 * 20 < cnt1)) {
     vp9_cyclic_refresh_set_golden_update(cpi);
     rc->frames_till_gf_update_due = rc->baseline_gf_interval;
 
@@ -361,7 +348,6 @@ void vp9_cyclic_refresh_check_golden_update(VP9_COMP *const cpi) {
     cpi->refresh_golden_frame = 1;
     force_gf_refresh = 1;
   }
-
   fraction_low =
       (double)low_content_frame / (rows * cols);
   // Update average.
@@ -438,7 +424,7 @@ static void cyclic_refresh_update_map(VP9_COMP *const cpi) {
         if (cr->map[bl_index2] == 0) {
           count_tot++;
           if (cr->last_coded_q_map[bl_index2] > qindex_thresh ||
-              cr->consec_zero_mv[bl_index2] < consec_zero_mv_thresh) {
+              cpi->consec_zero_mv[bl_index2] < consec_zero_mv_thresh) {
             sum_map++;
             count_sel++;
           }
@@ -504,6 +490,18 @@ void vp9_cyclic_refresh_update_parameters(VP9_COMP *const cpi) {
     cr->motion_thresh = 4;
     cr->rate_boost_fac = 12;
   }
+  if (cpi->oxcf.rc_mode == VPX_VBR) {
+    // To be adjusted for VBR mode, e.g., based on gf period and boost.
+    // For now use smaller qp-delta (than CBR), no second boosted seg, and
+    // turn-off (no refresh) on golden refresh (since it's already boosted).
+    cr->percent_refresh = 10;
+    cr->rate_ratio_qdelta = 1.5;
+    cr->rate_boost_fac = 10;
+    if (cpi->refresh_golden_frame == 1) {
+      cr->percent_refresh = 0;
+      cr->rate_ratio_qdelta = 1.0;
+    }
+  }
 }
 
 // Setup cyclic background refresh: set delta q and segmentation map.
@@ -529,8 +527,6 @@ void vp9_cyclic_refresh_setup(VP9_COMP *const cpi) {
     if (cm->frame_type == KEY_FRAME) {
       memset(cr->last_coded_q_map, MAXQ,
              cm->mi_rows * cm->mi_cols * sizeof(*cr->last_coded_q_map));
-      memset(cr->consec_zero_mv, 0,
-             cm->mi_rows * cm->mi_cols * sizeof(*cr->consec_zero_mv));
       cr->sb_index = 0;
     }
     return;
@@ -605,7 +601,6 @@ void vp9_cyclic_refresh_reset_resize(VP9_COMP *const cpi) {
   CYCLIC_REFRESH *const cr = cpi->cyclic_refresh;
   memset(cr->map, 0, cm->mi_rows * cm->mi_cols);
   memset(cr->last_coded_q_map, MAXQ, cm->mi_rows * cm->mi_cols);
-  memset(cr->consec_zero_mv, 0, cm->mi_rows * cm->mi_cols);
   cr->sb_index = 0;
   cpi->refresh_golden_frame = 1;
   cpi->refresh_alt_ref_frame = 1;

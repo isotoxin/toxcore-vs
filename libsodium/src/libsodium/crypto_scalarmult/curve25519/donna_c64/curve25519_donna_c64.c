@@ -34,15 +34,11 @@
 typedef uint8_t u8;
 typedef uint64_t limb;
 typedef limb felem[5];
-// This is a special gcc mode for 128-bit integers. It's implemented on 64-bit
-// platforms only as far as I know.
-typedef unsigned uint128_t __attribute__((mode(TI)));
-
-#undef force_inline
-#define force_inline __attribute__((always_inline))
+/* Special gcc mode for 128-bit integers */
+typedef unsigned uint128_t __attribute__ ((mode(TI)));
 
 /* Sum two numbers: output += in */
-static inline void force_inline
+static inline void
 fsum(limb *output, const limb *in) {
   output[0] += in[0];
   output[1] += in[1];
@@ -57,7 +53,7 @@ fsum(limb *output, const limb *in) {
  * Assumes that out[i] < 2**52
  * On return, out[i] < 2**55
  */
-static inline void force_inline
+static inline void
 fdifference_backwards(felem out, const felem in) {
   /* 152 is 19 << 3 */
   static const limb two54m152 = (((limb)1) << 54) - 152;
@@ -71,7 +67,7 @@ fdifference_backwards(felem out, const felem in) {
 }
 
 /* Multiply a number by a scalar: output = in * scalar */
-static inline void force_inline
+static inline void
 fscalar_product(felem output, const felem in, const limb scalar) {
   uint128_t a;
 
@@ -101,7 +97,7 @@ fscalar_product(felem output, const felem in, const limb scalar) {
  * Assumes that in[i] < 2**55 and likewise for in2.
  * On return, output[i] < 2**52
  */
-static inline void force_inline
+static inline void
 fmul(felem output, const felem in2, const felem in) {
   uint128_t t[5];
   limb r0,r1,r2,r3,r4,s0,s1,s2,s3,s4,c;
@@ -150,7 +146,7 @@ fmul(felem output, const felem in2, const felem in) {
   output[4] = r4;
 }
 
-static inline void force_inline
+static inline void
 fsquare_times(felem output, const felem in, limb count) {
   uint128_t t[5];
   limb r0,r1,r2,r3,r4,c;
@@ -193,18 +189,18 @@ fsquare_times(felem output, const felem in, limb count) {
 }
 
 #ifdef NATIVE_LITTLE_ENDIAN
-static inline limb force_inline
+static inline limb
 load_limb(const u8 *in) {
     limb out;
     memcpy(&out, in, sizeof (limb));
     return out;
 }
-static inline void force_inline
+static inline void
 store_limb(u8 *out, limb in) {
     memcpy(out, &in, sizeof (limb));
 }
 #else
-static inline limb force_inline
+static inline limb
 load_limb(const u8 *in) {
   return
     ((limb)in[0]) |
@@ -217,7 +213,7 @@ load_limb(const u8 *in) {
     (((limb)in[7]) << 56);
 }
 
-static inline void force_inline
+static inline void
 store_limb(u8 *out, limb in) {
   out[0] = in & 0xff;
   out[1] = (in >> 8) & 0xff;
@@ -318,7 +314,7 @@ fmonty(limb *x2, limb *z2, /* output 2Q */
 
   memcpy(origx, x, 5 * sizeof(limb));
   fsum(x, z);
-  fdifference_backwards(z, origx);  // does x - z
+  fdifference_backwards(z, origx); /* does x - z */
 
   memcpy(origxprime, xprime, sizeof(limb) * 5);
   fsum(xprime, zprime);
@@ -335,19 +331,19 @@ fmonty(limb *x2, limb *z2, /* output 2Q */
   fsquare_times(xx, x, 1);
   fsquare_times(zz, z, 1);
   fmul(x2, xx, zz);
-  fdifference_backwards(zz, xx);  // does zz = xx - zz
+  fdifference_backwards(zz, xx); /* does zz = xx - zz */
   fscalar_product(zzz, zz, 121665);
   fsum(zzz, xx);
   fmul(z2, zz, zzz);
 }
 
-// -----------------------------------------------------------------------------
-// Maybe swap the contents of two limb arrays (@a and @b), each @len elements
-// long. Perform the swap iff @swap is non-zero.
-//
-// This function performs the swap without leaking any side-channel
-// information.
-// -----------------------------------------------------------------------------
+/* -----------------------------------------------------------------------------
+   Maybe swap the contents of two limb arrays (@a and @b), each @len elements
+   long. Perform the swap iff @swap is non-zero.
+
+   This function performs the swap without leaking any side-channel
+   information.
+   ----------------------------------------------------------------------------- */
 static void
 swap_conditional(limb a[5], limb b[5], limb iswap) {
   unsigned i;
@@ -414,17 +410,17 @@ cmult(limb *resultx, limb *resultz, const u8 *n, const limb *q) {
 }
 
 
-// -----------------------------------------------------------------------------
-// Shamelessly copied from djb's code, tightened a little
-// -----------------------------------------------------------------------------
+/* -----------------------------------------------------------------------------
+   Shamelessly copied from djb's code, tightened a little
+   ----------------------------------------------------------------------------- */
 static void
 crecip(felem out, const felem z) {
   felem a,t0,b,c;
 
-  /* 2 */ fsquare_times(a, z, 1); // a = 2
+  /* 2 */ fsquare_times(a, z, 1); /* a = 2 */
   /* 8 */ fsquare_times(t0, a, 2);
-  /* 9 */ fmul(b, t0, z); // b = 9
-  /* 11 */ fmul(a, b, a); // a = 11
+  /* 9 */ fmul(b, t0, z); /* b = 9 */
+  /* 11 */ fmul(a, b, a); /* a = 11 */
   /* 22 */ fsquare_times(t0, a, 1);
   /* 2^5 - 2^0 = 31 */ fmul(b, t0, b);
   /* 2^10 - 2^5 */ fsquare_times(t0, b, 5);

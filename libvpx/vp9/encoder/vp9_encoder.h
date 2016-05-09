@@ -499,6 +499,9 @@ typedef struct VP9_COMP {
 
   NOISE_ESTIMATE noise_estimate;
 
+  // Count on how many consecutive times a block uses small/zeromv for encoding.
+  uint8_t *consec_zero_mv;
+
   // VAR_BASED_PARTITION thresholds
   // 0 - threshold_64x64; 1 - threshold_32x32;
   // 2 - threshold_16x16; 3 - vbp_threshold_8x8;
@@ -622,6 +625,11 @@ void vp9_scale_references(VP9_COMP *cpi);
 void vp9_update_reference_frames(VP9_COMP *cpi);
 
 void vp9_set_high_precision_mv(VP9_COMP *cpi, int allow_high_precision_mv);
+
+YV12_BUFFER_CONFIG *vp9_svc_twostage_scale(VP9_COMMON *cm,
+                                           YV12_BUFFER_CONFIG *unscaled,
+                                           YV12_BUFFER_CONFIG *scaled,
+                                           YV12_BUFFER_CONFIG *scaled_temp);
 
 YV12_BUFFER_CONFIG *vp9_scale_if_required(VP9_COMMON *cm,
                                           YV12_BUFFER_CONFIG *unscaled,

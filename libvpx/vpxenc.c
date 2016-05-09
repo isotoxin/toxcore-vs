@@ -380,7 +380,8 @@ static const arg_def_t cpu_used_vp9 = ARG_DEF(
 static const arg_def_t tile_cols = ARG_DEF(
     NULL, "tile-columns", 1, "Number of tile columns to use, log2");
 static const arg_def_t tile_rows = ARG_DEF(
-    NULL, "tile-rows", 1, "Number of tile rows to use, log2");
+    NULL, "tile-rows", 1,
+    "Number of tile rows to use, log2 (set to 0 while threads > 1)");
 static const arg_def_t lossless = ARG_DEF(
     NULL, "lossless", 1, "Lossless mode (0: false (default), 1: true)");
 static const arg_def_t frame_parallel_decoding = ARG_DEF(
@@ -789,7 +790,7 @@ static int compare_img(const vpx_image_t *const img1,
 
 #if !CONFIG_WEBM_IO
 typedef int stereo_format_t;
-struct EbmlGlobal { int debug; };
+struct WebmOutputContext { int debug; };
 #endif
 
 /* Per-stream configuration */
@@ -804,7 +805,6 @@ struct stream_config {
   int                       arg_ctrls[ARG_CTRL_CNT_MAX][2];
   int                       arg_ctrl_cnt;
   int                       write_webm;
-  int                       have_kf_max_dist;
 #if CONFIG_VP9_HIGHBITDEPTH
   // whether to use 16bit internal buffers
   int                       use_16bit_internal;
@@ -818,7 +818,7 @@ struct stream_state {
   struct stream_config      config;
   FILE                     *file;
   struct rate_hist         *rate_hist;
-  struct EbmlGlobal         ebml;
+  struct WebmOutputContext  webm_ctx;
   uint64_t                  psnr_sse_total;
   uint64_t                  psnr_samples_total;
   double                    psnr_totals[4];
@@ -1061,13 +1061,13 @@ static struct stream_state *new_stream(struct VpxEncoderConfig *global,
     stream->config.write_webm = 1;
 #if CONFIG_WEBM_IO
     stream->config.stereo_fmt = STEREO_FORMAT_MONO;
-    stream->ebml.last_pts_ns = -1;
-    stream->ebml.writer = NULL;
-    stream->ebml.segment = NULL;
+    stream->webm_ctx.last_pts_ns = -1;
+    stream->webm_ctx.writer = NULL;
+    stream->webm_ctx.segment = NULL;
 #endif
 
     /* Allows removal of the application version from the EBML tags */
-    stream->ebml.debug = global->debug;
+    stream->webm_ctx.debug = global->debug;
 
     /* Default lag_in_frames is 0 in realtime mode */
     if (global->deadline == VPX_DL_REALTIME)
@@ -1224,7 +1224,6 @@ static int parse_stream_params(struct VpxEncoderConfig *global,
       config->cfg.kf_min_dist = arg_parse_uint(&arg);
     } else if (arg_match(&arg, &kf_max_dist, argi)) {
       config->cfg.kf_max_dist = arg_parse_uint(&arg);
-      config->have_kf_max_dist = 1;
     } else if (arg_match(&arg, &kf_disabled, argi)) {
       config->cfg.kf_mode = VPX_KF_DISABLED;
 #if CONFIG_VP9_HIGHBITDEPTH
@@ -1352,19 +1351,6 @@ static void set_stream_dimensions(struct stream_state *stream,
   }
 }
 
-
-static void set_default_kf_interval(struct stream_state *stream,
-                                    struct VpxEncoderConfig *global) {
-  /* Use a max keyframe interval of 5 seconds, if none was
-   * specified on the command line.
-   */
-  if (!stream->config.have_kf_max_dist) {
-    double framerate = (double)global->framerate.num / global->framerate.den;
-    if (framerate > 0.0)
-      stream->config.cfg.kf_max_dist = (unsigned int)(5.0 * framerate);
-  }
-}
-
 static const char* file_type_to_string(enum VideoFileType t) {
   switch (t) {
     case FILE_TYPE_RAW: return "RAW";
@@ -1463,8 +1449,8 @@ static void open_output_file(struct stream_state *stream,
 
 #if CONFIG_WEBM_IO
   if (stream->config.write_webm) {
-    stream->ebml.stream = stream->file;
-    write_webm_file_header(&stream->ebml, cfg,
+    stream->webm_ctx.stream = stream->file;
+    write_webm_file_header(&stream->webm_ctx, cfg,
                            &global->framerate,
                            stream->config.stereo_fmt,
                            global->codec->fourcc,
@@ -1489,7 +1475,7 @@ static void close_output_file(struct stream_state *stream,
 
 #if CONFIG_WEBM_IO
   if (stream->config.write_webm) {
-    write_webm_file_footer(&stream->ebml);
+    write_webm_file_footer(&stream->webm_ctx);
   }
 #endif
 
@@ -1716,7 +1702,7 @@ static void get_cx_data(struct stream_state *stream,
         update_rate_histogram(stream->rate_hist, cfg, pkt);
 #if CONFIG_WEBM_IO
         if (stream->config.write_webm) {
-          write_webm_block(&stream->ebml, cfg, pkt);
+          write_webm_block(&stream->webm_ctx, cfg, pkt);
         }
 #endif
         if (!stream->config.write_webm) {
@@ -2085,8 +2071,6 @@ int main(int argc, const char **argv_) {
       FOREACH_STREAM(stream->config.cfg.g_timebase.den = global.framerate.num;
                      stream->config.cfg.g_timebase.num = global.framerate.den);
     }
-
-    FOREACH_STREAM(set_default_kf_interval(stream, &global));
 
     /* Show configuration */
     if (global.verbose && pass == 0)

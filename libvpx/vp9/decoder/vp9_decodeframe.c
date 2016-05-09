@@ -189,54 +189,31 @@ static void inverse_transform_block_inter(MACROBLOCKD* xd, int plane,
                                           uint8_t *dst, int stride,
                                           int eob) {
   struct macroblockd_plane *const pd = &xd->plane[plane];
-  if (eob > 0) {
-    tran_low_t *const dqcoeff = pd->dqcoeff;
+  tran_low_t *const dqcoeff = pd->dqcoeff;
+  assert(eob > 0);
 #if CONFIG_VP9_HIGHBITDEPTH
-    if (xd->cur_buf->flags & YV12_FLAG_HIGHBITDEPTH) {
-      if (xd->lossless) {
-        vp9_highbd_iwht4x4_add(dqcoeff, dst, stride, eob, xd->bd);
-      } else {
-        switch (tx_size) {
-          case TX_4X4:
-            vp9_highbd_idct4x4_add(dqcoeff, dst, stride, eob, xd->bd);
-            break;
-          case TX_8X8:
-            vp9_highbd_idct8x8_add(dqcoeff, dst, stride, eob, xd->bd);
-            break;
-          case TX_16X16:
-            vp9_highbd_idct16x16_add(dqcoeff, dst, stride, eob, xd->bd);
-            break;
-          case TX_32X32:
-            vp9_highbd_idct32x32_add(dqcoeff, dst, stride, eob, xd->bd);
-            break;
-          default:
-            assert(0 && "Invalid transform size");
-        }
-      }
+  if (xd->cur_buf->flags & YV12_FLAG_HIGHBITDEPTH) {
+    if (xd->lossless) {
+      vp9_highbd_iwht4x4_add(dqcoeff, dst, stride, eob, xd->bd);
     } else {
-      if (xd->lossless) {
-        vp9_iwht4x4_add(dqcoeff, dst, stride, eob);
-      } else {
-        switch (tx_size) {
-          case TX_4X4:
-            vp9_idct4x4_add(dqcoeff, dst, stride, eob);
-            break;
-          case TX_8X8:
-            vp9_idct8x8_add(dqcoeff, dst, stride, eob);
-            break;
-          case TX_16X16:
-            vp9_idct16x16_add(dqcoeff, dst, stride, eob);
-            break;
-          case TX_32X32:
-            vp9_idct32x32_add(dqcoeff, dst, stride, eob);
-            break;
-          default:
-            assert(0 && "Invalid transform size");
-            return;
-        }
+      switch (tx_size) {
+        case TX_4X4:
+          vp9_highbd_idct4x4_add(dqcoeff, dst, stride, eob, xd->bd);
+          break;
+        case TX_8X8:
+          vp9_highbd_idct8x8_add(dqcoeff, dst, stride, eob, xd->bd);
+          break;
+        case TX_16X16:
+          vp9_highbd_idct16x16_add(dqcoeff, dst, stride, eob, xd->bd);
+          break;
+        case TX_32X32:
+          vp9_highbd_idct32x32_add(dqcoeff, dst, stride, eob, xd->bd);
+          break;
+        default:
+          assert(0 && "Invalid transform size");
       }
     }
-#else
+  } else {
     if (xd->lossless) {
       vp9_iwht4x4_add(dqcoeff, dst, stride, eob);
     } else {
@@ -258,18 +235,40 @@ static void inverse_transform_block_inter(MACROBLOCKD* xd, int plane,
           return;
       }
     }
+  }
+#else
+  if (xd->lossless) {
+    vp9_iwht4x4_add(dqcoeff, dst, stride, eob);
+  } else {
+    switch (tx_size) {
+      case TX_4X4:
+        vp9_idct4x4_add(dqcoeff, dst, stride, eob);
+        break;
+      case TX_8X8:
+        vp9_idct8x8_add(dqcoeff, dst, stride, eob);
+        break;
+      case TX_16X16:
+        vp9_idct16x16_add(dqcoeff, dst, stride, eob);
+        break;
+      case TX_32X32:
+        vp9_idct32x32_add(dqcoeff, dst, stride, eob);
+        break;
+      default:
+        assert(0 && "Invalid transform size");
+        return;
+    }
+  }
 #endif  // CONFIG_VP9_HIGHBITDEPTH
 
-    if (eob == 1) {
-      dqcoeff[0] = 0;
-    } else {
-      if (tx_size <= TX_16X16 && eob <= 10)
-        memset(dqcoeff, 0, 4 * (4 << tx_size) * sizeof(dqcoeff[0]));
-      else if (tx_size == TX_32X32 && eob <= 34)
-        memset(dqcoeff, 0, 256 * sizeof(dqcoeff[0]));
-      else
-        memset(dqcoeff, 0, (16 << (tx_size << 1)) * sizeof(dqcoeff[0]));
-    }
+  if (eob == 1) {
+    dqcoeff[0] = 0;
+  } else {
+    if (tx_size <= TX_16X16 && eob <= 10)
+      memset(dqcoeff, 0, 4 * (4 << tx_size) * sizeof(dqcoeff[0]));
+    else if (tx_size == TX_32X32 && eob <= 34)
+      memset(dqcoeff, 0, 256 * sizeof(dqcoeff[0]));
+    else
+      memset(dqcoeff, 0, (16 << (tx_size << 1)) * sizeof(dqcoeff[0]));
   }
 }
 
@@ -279,54 +278,31 @@ static void inverse_transform_block_intra(MACROBLOCKD* xd, int plane,
                                           uint8_t *dst, int stride,
                                           int eob) {
   struct macroblockd_plane *const pd = &xd->plane[plane];
-  if (eob > 0) {
-    tran_low_t *const dqcoeff = pd->dqcoeff;
+  tran_low_t *const dqcoeff = pd->dqcoeff;
+  assert(eob > 0);
 #if CONFIG_VP9_HIGHBITDEPTH
-    if (xd->cur_buf->flags & YV12_FLAG_HIGHBITDEPTH) {
-      if (xd->lossless) {
-        vp9_highbd_iwht4x4_add(dqcoeff, dst, stride, eob, xd->bd);
-      } else {
-        switch (tx_size) {
-          case TX_4X4:
-            vp9_highbd_iht4x4_add(tx_type, dqcoeff, dst, stride, eob, xd->bd);
-            break;
-          case TX_8X8:
-            vp9_highbd_iht8x8_add(tx_type, dqcoeff, dst, stride, eob, xd->bd);
-            break;
-          case TX_16X16:
-            vp9_highbd_iht16x16_add(tx_type, dqcoeff, dst, stride, eob, xd->bd);
-            break;
-          case TX_32X32:
-            vp9_highbd_idct32x32_add(dqcoeff, dst, stride, eob, xd->bd);
-            break;
-          default:
-            assert(0 && "Invalid transform size");
-        }
-      }
+  if (xd->cur_buf->flags & YV12_FLAG_HIGHBITDEPTH) {
+    if (xd->lossless) {
+      vp9_highbd_iwht4x4_add(dqcoeff, dst, stride, eob, xd->bd);
     } else {
-      if (xd->lossless) {
-        vp9_iwht4x4_add(dqcoeff, dst, stride, eob);
-      } else {
-        switch (tx_size) {
-          case TX_4X4:
-            vp9_iht4x4_add(tx_type, dqcoeff, dst, stride, eob);
-            break;
-          case TX_8X8:
-            vp9_iht8x8_add(tx_type, dqcoeff, dst, stride, eob);
-            break;
-          case TX_16X16:
-            vp9_iht16x16_add(tx_type, dqcoeff, dst, stride, eob);
-            break;
-          case TX_32X32:
-            vp9_idct32x32_add(dqcoeff, dst, stride, eob);
-            break;
-          default:
-            assert(0 && "Invalid transform size");
-            return;
-        }
+      switch (tx_size) {
+        case TX_4X4:
+          vp9_highbd_iht4x4_add(tx_type, dqcoeff, dst, stride, eob, xd->bd);
+          break;
+        case TX_8X8:
+          vp9_highbd_iht8x8_add(tx_type, dqcoeff, dst, stride, eob, xd->bd);
+          break;
+        case TX_16X16:
+          vp9_highbd_iht16x16_add(tx_type, dqcoeff, dst, stride, eob, xd->bd);
+          break;
+        case TX_32X32:
+          vp9_highbd_idct32x32_add(dqcoeff, dst, stride, eob, xd->bd);
+          break;
+        default:
+          assert(0 && "Invalid transform size");
       }
     }
-#else
+  } else {
     if (xd->lossless) {
       vp9_iwht4x4_add(dqcoeff, dst, stride, eob);
     } else {
@@ -348,18 +324,40 @@ static void inverse_transform_block_intra(MACROBLOCKD* xd, int plane,
           return;
       }
     }
+  }
+#else
+  if (xd->lossless) {
+    vp9_iwht4x4_add(dqcoeff, dst, stride, eob);
+  } else {
+    switch (tx_size) {
+      case TX_4X4:
+        vp9_iht4x4_add(tx_type, dqcoeff, dst, stride, eob);
+        break;
+      case TX_8X8:
+        vp9_iht8x8_add(tx_type, dqcoeff, dst, stride, eob);
+        break;
+      case TX_16X16:
+        vp9_iht16x16_add(tx_type, dqcoeff, dst, stride, eob);
+        break;
+      case TX_32X32:
+        vp9_idct32x32_add(dqcoeff, dst, stride, eob);
+        break;
+      default:
+        assert(0 && "Invalid transform size");
+        return;
+    }
+  }
 #endif  // CONFIG_VP9_HIGHBITDEPTH
 
-    if (eob == 1) {
-      dqcoeff[0] = 0;
-    } else {
-      if (tx_type == DCT_DCT && tx_size <= TX_16X16 && eob <= 10)
-        memset(dqcoeff, 0, 4 * (4 << tx_size) * sizeof(dqcoeff[0]));
-      else if (tx_size == TX_32X32 && eob <= 34)
-        memset(dqcoeff, 0, 256 * sizeof(dqcoeff[0]));
-      else
-        memset(dqcoeff, 0, (16 << (tx_size << 1)) * sizeof(dqcoeff[0]));
-    }
+  if (eob == 1) {
+    dqcoeff[0] = 0;
+  } else {
+    if (tx_type == DCT_DCT && tx_size <= TX_16X16 && eob <= 10)
+      memset(dqcoeff, 0, 4 * (4 << tx_size) * sizeof(dqcoeff[0]));
+    else if (tx_size == TX_32X32 && eob <= 34)
+      memset(dqcoeff, 0, 256 * sizeof(dqcoeff[0]));
+    else
+      memset(dqcoeff, 0, (16 << (tx_size << 1)) * sizeof(dqcoeff[0]));
   }
 }
 
@@ -389,8 +387,10 @@ static void predict_and_reconstruct_intra_block(MACROBLOCKD *const xd,
         &vp9_default_scan_orders[tx_size] : &vp9_scan_orders[tx_size][tx_type];
     const int eob = vp9_decode_block_tokens(xd, plane, sc, col, row, tx_size,
                                             r, mi->segment_id);
-    inverse_transform_block_intra(xd, plane, tx_type, tx_size,
-                                  dst, pd->dst.stride, eob);
+    if (eob > 0) {
+      inverse_transform_block_intra(xd, plane, tx_type, tx_size,
+                                    dst, pd->dst.stride, eob);
+    }
   }
 }
 
@@ -402,9 +402,11 @@ static int reconstruct_inter_block(MACROBLOCKD *const xd, vpx_reader *r,
   const int eob = vp9_decode_block_tokens(xd, plane, sc, col, row, tx_size, r,
                                           mi->segment_id);
 
-  inverse_transform_block_inter(xd, plane, tx_size,
-                            &pd->dst.buf[4 * row * pd->dst.stride + 4 * col],
-                            pd->dst.stride, eob);
+  if (eob > 0) {
+    inverse_transform_block_inter(
+        xd, plane, tx_size, &pd->dst.buf[4 * row * pd->dst.stride + 4 * col],
+        pd->dst.stride, eob);
+  }
   return eob;
 }
 
@@ -859,7 +861,7 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
                          VPX_CODEC_CORRUPT_FRAME, "Invalid block size.");
   }
 
-  vpx_read_mode_info(pbi, xd, mi_row, mi_col, r, x_mis, y_mis);
+  vp9_read_mode_info(pbi, xd, mi_row, mi_col, r, x_mis, y_mis);
 
   if (mi->skip) {
     dec_reset_skip_context(xd);
@@ -880,6 +882,9 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
           0 : xd->mb_to_right_edge >> (5 + pd->subsampling_x));
       const int max_blocks_high = num_4x4_h + (xd->mb_to_bottom_edge >= 0 ?
           0 : xd->mb_to_bottom_edge >> (5 + pd->subsampling_y));
+
+      xd->max_blocks_wide = xd->mb_to_right_edge >= 0 ? 0 : max_blocks_wide;
+      xd->max_blocks_high = xd->mb_to_bottom_edge >= 0 ? 0 : max_blocks_high;
 
       for (row = 0; row < max_blocks_high; row += step)
         for (col = 0; col < max_blocks_wide; col += step)
@@ -908,6 +913,9 @@ static void decode_block(VP9Decoder *const pbi, MACROBLOCKD *const xd,
             0 : xd->mb_to_right_edge >> (5 + pd->subsampling_x));
         const int max_blocks_high = num_4x4_h + (xd->mb_to_bottom_edge >= 0 ?
             0 : xd->mb_to_bottom_edge >> (5 + pd->subsampling_y));
+
+        xd->max_blocks_wide = xd->mb_to_right_edge >= 0 ? 0 : max_blocks_wide;
+        xd->max_blocks_high = xd->mb_to_bottom_edge >= 0 ? 0 : max_blocks_high;
 
         for (row = 0; row < max_blocks_high; row += step)
           for (col = 0; col < max_blocks_wide; col += step)
@@ -1460,7 +1468,7 @@ static const uint8_t *decode_tiles(VP9Decoder *pbi,
   TileBuffer tile_buffers[4][1 << 6];
   int tile_row, tile_col;
   int mi_row, mi_col;
-  TileData *tile_data = NULL;
+  TileWorkerData *tile_data = NULL;
 
   if (cm->lf.filter_level && !cm->skip_loop_filter &&
       pbi->lf_worker.data1 == NULL) {
@@ -1496,28 +1504,17 @@ static const uint8_t *decode_tiles(VP9Decoder *pbi,
 
   get_tile_buffers(pbi, data, data_end, tile_cols, tile_rows, tile_buffers);
 
-  if (pbi->tile_data == NULL ||
-      (tile_cols * tile_rows) != pbi->total_tiles) {
-    vpx_free(pbi->tile_data);
-    CHECK_MEM_ERROR(
-        cm,
-        pbi->tile_data,
-        vpx_memalign(32, tile_cols * tile_rows * (sizeof(*pbi->tile_data))));
-    pbi->total_tiles = tile_rows * tile_cols;
-  }
-
   // Load all tile information into tile_data.
   for (tile_row = 0; tile_row < tile_rows; ++tile_row) {
     for (tile_col = 0; tile_col < tile_cols; ++tile_col) {
       const TileBuffer *const buf = &tile_buffers[tile_row][tile_col];
-      tile_data = pbi->tile_data + tile_cols * tile_row + tile_col;
-      tile_data->cm = cm;
+      tile_data = pbi->tile_worker_data + tile_cols * tile_row + tile_col;
       tile_data->xd = pbi->mb;
       tile_data->xd.corrupted = 0;
-      tile_data->xd.counts = cm->frame_parallel_decoding_mode ?
-                             NULL : &cm->counts;
+      tile_data->xd.counts =
+          cm->frame_parallel_decoding_mode ? NULL : &cm->counts;
       vp9_zero(tile_data->dqcoeff);
-      vp9_tile_init(&tile_data->xd.tile, tile_data->cm, tile_row, tile_col);
+      vp9_tile_init(&tile_data->xd.tile, cm, tile_row, tile_col);
       setup_token_decoder(buf->data, data_end, buf->size, &cm->error,
                           &tile_data->bit_reader, pbi->decrypt_cb,
                           pbi->decrypt_state);
@@ -1533,8 +1530,8 @@ static const uint8_t *decode_tiles(VP9Decoder *pbi,
       for (tile_col = 0; tile_col < tile_cols; ++tile_col) {
         const int col = pbi->inv_tile_order ?
                         tile_cols - tile_col - 1 : tile_col;
-        tile_data = pbi->tile_data + tile_cols * tile_row + col;
-        vp9_tile_set_col(&tile, tile_data->cm, col);
+        tile_data = pbi->tile_worker_data + tile_cols * tile_row + col;
+        vp9_tile_set_col(&tile, cm, col);
         vp9_zero(tile_data->xd.left_context);
         vp9_zero(tile_data->xd.left_seg_context);
         for (mi_col = tile.mi_col_start; mi_col < tile.mi_col_end;
@@ -1586,7 +1583,7 @@ static const uint8_t *decode_tiles(VP9Decoder *pbi,
   }
 
   // Get last tile data.
-  tile_data = pbi->tile_data + tile_cols * tile_rows - 1;
+  tile_data = pbi->tile_worker_data + tile_cols * tile_rows - 1;
 
   if (pbi->frame_parallel_decode)
     vp9_frameworker_broadcast(pbi->cur_buf, INT_MAX);
@@ -1671,12 +1668,6 @@ static const uint8_t *decode_tiles_mt(VP9Decoder *pbi,
     const int num_threads = pbi->max_threads;
     CHECK_MEM_ERROR(cm, pbi->tile_workers,
                     vpx_malloc(num_threads * sizeof(*pbi->tile_workers)));
-    // Ensure tile data offsets will be properly aligned. This may fail on
-    // platforms without DECLARE_ALIGNED().
-    assert((sizeof(*pbi->tile_worker_data) % 16) == 0);
-    CHECK_MEM_ERROR(cm, pbi->tile_worker_data,
-                    vpx_memalign(32, num_threads *
-                                 sizeof(*pbi->tile_worker_data)));
     for (n = 0; n < num_threads; ++n) {
       VPxWorker *const worker = &pbi->tile_workers[n];
       ++pbi->num_tile_workers;
@@ -1692,7 +1683,8 @@ static const uint8_t *decode_tiles_mt(VP9Decoder *pbi,
   // Reset tile decoding hook
   for (n = 0; n < num_workers; ++n) {
     VPxWorker *const worker = &pbi->tile_workers[n];
-    TileWorkerData *const tile_data = &pbi->tile_worker_data[n];
+    TileWorkerData *const tile_data =
+        &pbi->tile_worker_data[n + pbi->total_tiles];
     winterface->sync(worker);
     tile_data->xd = pbi->mb;
     tile_data->xd.counts =
@@ -2219,6 +2211,19 @@ void vp9_decode_frame(VP9Decoder *pbi,
     // Signal the main thread that context is ready.
     vp9_frameworker_signal_stats(worker);
     vp9_frameworker_unlock_stats(worker);
+  }
+
+  if (pbi->tile_worker_data == NULL ||
+      (tile_cols * tile_rows) != pbi->total_tiles) {
+    const int num_tile_workers = tile_cols * tile_rows +
+        ((pbi->max_threads > 1) ? pbi->max_threads : 0);
+    const size_t twd_size = num_tile_workers * sizeof(*pbi->tile_worker_data);
+    // Ensure tile data offsets will be properly aligned. This may fail on
+    // platforms without DECLARE_ALIGNED().
+    assert((sizeof(*pbi->tile_worker_data) % 16) == 0);
+    vpx_free(pbi->tile_worker_data);
+    CHECK_MEM_ERROR(cm, pbi->tile_worker_data, vpx_memalign(32, twd_size));
+    pbi->total_tiles = tile_rows * tile_cols;
   }
 
   if (pbi->max_threads > 1 && tile_rows == 1 && tile_cols > 1) {

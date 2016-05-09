@@ -14,8 +14,9 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) && !defined(__BORLANDC__)
 # include <unistd.h>
 #endif
 
@@ -35,6 +36,10 @@ extern "C"
 # endif
 BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
 # pragma comment(lib, "advapi32.lib")
+# ifdef __BORLANDC__
+#  define _ftime ftime
+#  define _timeb timeb
+# endif
 #endif
 
 #define SALSA20_RANDOM_BLOCK_SIZE crypto_core_salsa20_OUTPUTBYTES
@@ -45,22 +50,26 @@ BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
 # define HAVE_SAFE_ARC4RANDOM 1
 #endif
 
-typedef struct Salsa20Random_ {
-    unsigned char key[crypto_stream_salsa20_KEYBYTES];
-    unsigned char rnd32[16U * SALSA20_RANDOM_BLOCK_SIZE];
-    uint64_t      nonce;
-    size_t        rnd32_outleft;
-#ifdef HAVE_GETPID
-    pid_t         pid;
+#ifndef SSIZE_MAX
+# define SSIZE_MAX (SIZE_MAX / 2 - 1)
 #endif
+
+typedef struct Salsa20Random_ {
+    size_t        rnd32_outleft;
     int           random_data_source_fd;
     int           initialized;
     int           getrandom_available;
+    unsigned char key[crypto_stream_salsa20_KEYBYTES];
+    unsigned char rnd32[16U * SALSA20_RANDOM_BLOCK_SIZE];
+    uint64_t      nonce;
+#ifdef HAVE_GETPID
+    pid_t         pid;
+#endif
 } Salsa20Random;
 
 static Salsa20Random stream = {
-    SODIUM_C99(.random_data_source_fd =) -1,
     SODIUM_C99(.rnd32_outleft =) (size_t) 0U,
+    SODIUM_C99(.random_data_source_fd =) -1,
     SODIUM_C99(.initialized =) 0,
     SODIUM_C99(.getrandom_available =) 0
 };
@@ -82,7 +91,10 @@ sodium_hrtime(void)
 #else
     {
         struct timeval tv;
-        assert(gettimeofday(&tv, NULL) == 0);
+
+        if (gettimeofday(&tv, NULL) != 0) {
+            abort(); /* LCOV_EXCL_LINE */
+        }
         ts = ((uint64_t) tv.tv_sec) * 1000000U + (uint64_t) tv.tv_usec;
     }
 #endif
@@ -97,9 +109,10 @@ safe_read(const int fd, void * const buf_, size_t size)
     ssize_t        readnb;
 
     assert(size > (size_t) 0U);
+    assert(size <= SSIZE_MAX);
     do {
         while ((readnb = read(fd, buf, size)) < (ssize_t) 0 &&
-               (errno == EINTR || errno == EAGAIN));  /* LCOV_EXCL_LINE */
+               (errno == EINTR || errno == EAGAIN)); /* LCOV_EXCL_LINE */
         if (readnb < (ssize_t) 0) {
             return readnb; /* LCOV_EXCL_LINE */
         }
@@ -160,7 +173,7 @@ randombytes_salsa20_random_random_dev_open(void)
 }
 # endif
 
-# ifdef SYS_getrandom
+# if defined(SYS_getrandom) && defined(__NR_getrandom)
 static int
 _randombytes_linux_getrandom(void * const buf, const size_t size)
 {
@@ -208,7 +221,7 @@ randombytes_salsa20_random_init(void)
     errno = errno_save;
 # else
 
-#  ifdef SYS_getrandom
+#  if defined(SYS_getrandom) && defined(__NR_getrandom)
     {
         unsigned char fodder[16];
 
@@ -274,7 +287,7 @@ randombytes_salsa20_random_stir(void)
 
 # ifdef HAVE_SAFE_ARC4RANDOM
     arc4random_buf(m0, sizeof m0);
-# elif defined(SYS_getrandom)
+# elif defined(SYS_getrandom) && defined(__NR_getrandom)
     if (stream.getrandom_available != 0) {
         if (randombytes_linux_getrandom(m0, sizeof m0) != 0) {
             abort(); /* LCOV_EXCL_LINE */
@@ -299,7 +312,7 @@ randombytes_salsa20_random_stir(void)
 #endif
     if (crypto_generichash(stream.key, sizeof stream.key, k0, sizeof_k0,
                            hsigma, sizeof hsigma) != 0) {
-        abort();
+        abort(); /* LCOV_EXCL_LINE */
     }
     COMPILER_ASSERT(sizeof stream.key <= sizeof m0);
     randombytes_salsa20_random_rekey(m0);
@@ -345,7 +358,7 @@ randombytes_salsa20_random_close(void)
     ret = 0;
 # endif
 
-# ifdef SYS_getrandom
+# if defined(SYS_getrandom) && defined(__NR_getrandom)
     if (stream.getrandom_available != 0) {
         ret = 0;
     }

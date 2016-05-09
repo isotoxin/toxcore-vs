@@ -18,7 +18,6 @@
 #include "vp9/common/vp9_entropy.h"
 #include "vp9/common/vp9_pred_common.h"
 #include "vp9/common/vp9_scan.h"
-#include "vp9/common/vp9_seg_common.h"
 
 #include "vp9/encoder/vp9_cost.h"
 #include "vp9/encoder/vp9_encoder.h"
@@ -49,6 +48,35 @@ static const TOKENVALUE dct_cat_lt_10_value_tokens[] = {
 };
 const TOKENVALUE *vp9_dct_cat_lt_10_value_tokens = dct_cat_lt_10_value_tokens +
     (sizeof(dct_cat_lt_10_value_tokens) / sizeof(*dct_cat_lt_10_value_tokens))
+    / 2;
+// The corresponding costs of the extrabits for the tokens in the above table
+// are stored in the table below. The values are obtained from looking up the
+// entry for the specified extrabits in the table corresponding to the token
+// (as defined in cost element vp9_extra_bits)
+// e.g. {9, 63} maps to cat5_cost[63 >> 1], {1, 1} maps to sign_cost[1 >> 1]
+static const int dct_cat_lt_10_value_cost[] = {
+  3773, 3750, 3704, 3681, 3623, 3600, 3554, 3531,
+  3432, 3409, 3363, 3340, 3282, 3259, 3213, 3190,
+  3136, 3113, 3067, 3044, 2986, 2963, 2917, 2894,
+  2795, 2772, 2726, 2703, 2645, 2622, 2576, 2553,
+  3197, 3116, 3058, 2977, 2881, 2800,
+  2742, 2661, 2615, 2534, 2476, 2395,
+  2299, 2218, 2160, 2079,
+  2566, 2427, 2334, 2195, 2023, 1884, 1791, 1652,
+  1893, 1696, 1453, 1256, 1229, 864,
+  512, 512, 512, 512, 0,
+  512, 512, 512, 512,
+  864, 1229, 1256, 1453, 1696, 1893,
+  1652, 1791, 1884, 2023, 2195, 2334, 2427, 2566,
+  2079, 2160, 2218, 2299, 2395, 2476, 2534, 2615,
+  2661, 2742, 2800, 2881, 2977, 3058, 3116, 3197,
+  2553, 2576, 2622, 2645, 2703, 2726, 2772, 2795,
+  2894, 2917, 2963, 2986, 3044, 3067, 3113, 3136,
+  3190, 3213, 3259, 3282, 3340, 3363, 3409, 3432,
+  3531, 3554, 3600, 3623, 3681, 3704, 3750, 3773,
+};
+const int *vp9_dct_cat_lt_10_value_cost = dct_cat_lt_10_value_cost +
+    (sizeof(dct_cat_lt_10_value_cost) / sizeof(*dct_cat_lt_10_value_cost))
     / 2;
 
 // Array indices are identical to previously-existing CONTEXT_NODE indices
@@ -325,12 +353,6 @@ static INLINE void add_token_no_extra(TOKENEXTRA **t,
   ++counts[token];
 }
 
-static INLINE int get_tx_eob(const struct segmentation *seg, int segment_id,
-                             TX_SIZE tx_size) {
-  const int eob_max = 16 << (tx_size << 1);
-  return segfeature_active(seg, segment_id, SEG_LVL_SKIP) ? 0 : eob_max;
-}
-
 static void tokenize_b(int plane, int block, BLOCK_SIZE plane_bsize,
                        TX_SIZE tx_size, void *arg) {
   struct tokenize_b_args* const args = arg;
@@ -349,7 +371,6 @@ static void tokenize_b(int plane, int block, BLOCK_SIZE plane_bsize,
   int eob = p->eobs[block];
   const PLANE_TYPE type = get_plane_type(plane);
   const tran_low_t *qcoeff = BLOCK_OFFSET(p->qcoeff, block);
-  const int segment_id = mi->segment_id;
   const int16_t *scan, *nb;
   const scan_order *so;
   const int ref = is_inter_block(mi);
@@ -360,7 +381,7 @@ static void tokenize_b(int plane, int block, BLOCK_SIZE plane_bsize,
   unsigned int (*const eob_branch)[COEFF_CONTEXTS] =
       td->counts->eob_branch[tx_size][type][ref];
   const uint8_t *const band = get_band_translate(tx_size);
-  const int seg_eob = get_tx_eob(&cpi->common.seg, segment_id, tx_size);
+  const int tx_eob = 16 << (tx_size << 1);
   int16_t token;
   EXTRABIT extra;
   int aoff, loff;
@@ -397,7 +418,7 @@ static void tokenize_b(int plane, int block, BLOCK_SIZE plane_bsize,
     ++c;
     pt = get_coef_context(nb, token_cache, c);
   }
-  if (c < seg_eob) {
+  if (c < tx_eob) {
     ++eob_branch[band[c]][pt];
     add_token_no_extra(&t, coef_probs[band[c]][pt], EOB_TOKEN,
                        counts[band[c]][pt]);
@@ -452,24 +473,26 @@ int vp9_has_high_freq_in_plane(MACROBLOCK *x, BLOCK_SIZE bsize, int plane) {
 }
 
 void vp9_tokenize_sb(VP9_COMP *cpi, ThreadData *td, TOKENEXTRA **t,
-                     int dry_run, BLOCK_SIZE bsize) {
-  VP9_COMMON *const cm = &cpi->common;
+                     int dry_run, int seg_skip, BLOCK_SIZE bsize) {
   MACROBLOCK *const x = &td->mb;
   MACROBLOCKD *const xd = &x->e_mbd;
   MODE_INFO *const mi = xd->mi[0];
   const int ctx = vp9_get_skip_context(xd);
-  const int skip_inc = !segfeature_active(&cm->seg, mi->segment_id,
-                                          SEG_LVL_SKIP);
   struct tokenize_b_args arg = {cpi, td, t};
+
+  if (seg_skip) {
+    assert(mi->skip);
+  }
+
   if (mi->skip) {
-    if (!dry_run)
-      td->counts->skip[ctx][1] += skip_inc;
+    if (!dry_run && !seg_skip)
+      ++td->counts->skip[ctx][1];
     reset_skip_context(xd, bsize);
     return;
   }
 
   if (!dry_run) {
-    td->counts->skip[ctx][0] += skip_inc;
+    ++td->counts->skip[ctx][0];
     vp9_foreach_transformed_block(xd, bsize, tokenize_b, &arg);
   } else {
     vp9_foreach_transformed_block(xd, bsize, set_entropy_context_b, &arg);

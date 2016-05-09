@@ -19,6 +19,15 @@
 #include "blake2.h"
 #include "blake2-impl.h"
 #include "runtime.h"
+#include "private/common.h"
+
+#ifdef HAVE_TI_MODE
+# if defined(__SIZEOF_INT128__)
+typedef unsigned __int128 uint128_t;
+# else
+typedef unsigned uint128_t __attribute__ ((mode(TI)));
+# endif
+#endif
 
 static blake2b_compress_fn blake2b_compress = blake2b_compress_ref;
 
@@ -45,6 +54,11 @@ static inline int blake2b_clear_lastnode( blake2b_state *S )
 }
 #endif
 
+static inline int blake2b_is_lastblock( const blake2b_state *S )
+{
+  return S->f[0] != 0;
+}
+
 static inline int blake2b_set_lastblock( blake2b_state *S )
 {
   if( S->last_node ) blake2b_set_lastnode( S );
@@ -63,8 +77,8 @@ static inline int blake2b_clear_lastblock( blake2b_state *S )
 #endif
 static inline int blake2b_increment_counter( blake2b_state *S, const uint64_t inc )
 {
-#if defined(__x86_64__) && defined(__SIZEOF_INT128__)
-  __uint128_t t = ( ( __uint128_t )S->t[1] << 64 ) | S->t[0];
+#ifdef HAVE_TI_MODE
+  uint128_t t = ( ( uint128_t )S->t[1] << 64 ) | S->t[0];
   t += inc;
   S->t[0] = ( uint64_t )( t >>  0 );
   S->t[1] = ( uint64_t )( t >> 64 );
@@ -75,8 +89,10 @@ static inline int blake2b_increment_counter( blake2b_state *S, const uint64_t in
   return 0;
 }
 
-// Parameter-related functions
+/* Parameter-related functions */
 #if 0
+/* Redundant: digest length is directly set in blake2b_init(), blake2b_init_salt_personal(),
+ * blake2b_init_key() and blake2b_init_key_salt_personal() */
 static inline int blake2b_param_set_digest_length( blake2b_param *P, const uint8_t digest_length )
 {
   P->digest_length = digest_length;
@@ -97,13 +113,13 @@ static inline int blake2b_param_set_max_depth( blake2b_param *P, const uint8_t d
 
 static inline int blake2b_param_set_leaf_length( blake2b_param *P, const uint32_t leaf_length )
 {
-  store32( &P->leaf_length, leaf_length );
+  STORE32_LE( P->leaf_length, leaf_length );
   return 0;
 }
 
 static inline int blake2b_param_set_node_offset( blake2b_param *P, const uint64_t node_offset )
 {
-  store64( &P->node_offset, node_offset );
+  STORE64_LE( P->node_offset, node_offset );
   return 0;
 }
 
@@ -147,12 +163,13 @@ int blake2b_init_param( blake2b_state *S, const blake2b_param *P )
   size_t i;
   const uint8_t *p;
 
+  (void) sizeof(int[sizeof *P == 64 ? 1 : -1]);
   blake2b_init0( S );
   p = ( const uint8_t * )( P );
 
   /* IV XOR ParamBlock */
   for( i = 0; i < 8; ++i )
-    S->h[i] ^= load64( p + sizeof( S->h[i] ) * i );
+    S->h[i] ^= LOAD64_LE( p + sizeof( S->h[i] ) * i );
 
   return 0;
 }
@@ -161,14 +178,14 @@ int blake2b_init( blake2b_state *S, const uint8_t outlen )
 {
   blake2b_param P[1];
 
-  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) return -1;
+  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) abort();
 
   P->digest_length = outlen;
   P->key_length    = 0;
   P->fanout        = 1;
   P->depth         = 1;
-  store32( &P->leaf_length, 0 );
-  store64( &P->node_offset, 0 );
+  STORE32_LE( P->leaf_length, 0 );
+  STORE64_LE( P->node_offset, 0 );
   P->node_depth    = 0;
   P->inner_length  = 0;
   memset( P->reserved, 0, sizeof( P->reserved ) );
@@ -182,14 +199,14 @@ int blake2b_init_salt_personal( blake2b_state *S, const uint8_t outlen,
 {
   blake2b_param P[1];
 
-  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) return -1;
+  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) abort();
 
   P->digest_length = outlen;
   P->key_length    = 0;
   P->fanout        = 1;
   P->depth         = 1;
-  store32( &P->leaf_length, 0 );
-  store64( &P->node_offset, 0 );
+  STORE32_LE( P->leaf_length, 0 );
+  STORE64_LE( P->node_offset, 0 );
   P->node_depth    = 0;
   P->inner_length  = 0;
   memset( P->reserved, 0, sizeof( P->reserved ) );
@@ -210,23 +227,23 @@ int blake2b_init_key( blake2b_state *S, const uint8_t outlen, const void *key, c
 {
   blake2b_param P[1];
 
-  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) return -1;
+  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) abort();
 
-  if ( !key || !keylen || keylen > BLAKE2B_KEYBYTES ) return -1;
+  if ( !key || !keylen || keylen > BLAKE2B_KEYBYTES ) abort();
 
   P->digest_length = outlen;
   P->key_length    = keylen;
   P->fanout        = 1;
   P->depth         = 1;
-  store32( &P->leaf_length, 0 );
-  store64( &P->node_offset, 0 );
+  STORE32_LE( P->leaf_length, 0 );
+  STORE64_LE( P->node_offset, 0 );
   P->node_depth    = 0;
   P->inner_length  = 0;
   memset( P->reserved, 0, sizeof( P->reserved ) );
   memset( P->salt,     0, sizeof( P->salt ) );
   memset( P->personal, 0, sizeof( P->personal ) );
 
-  if( blake2b_init_param( S, P ) < 0 ) return -1;
+  if( blake2b_init_param( S, P ) < 0 ) abort();
 
   {
     uint8_t block[BLAKE2B_BLOCKBYTES];
@@ -243,16 +260,16 @@ int blake2b_init_key_salt_personal( blake2b_state *S, const uint8_t outlen, cons
 {
   blake2b_param P[1];
 
-  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) return -1;
+  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) abort();
 
-  if ( !key || !keylen || keylen > BLAKE2B_KEYBYTES ) return -1;
+  if ( !key || !keylen || keylen > BLAKE2B_KEYBYTES ) abort();
 
   P->digest_length = outlen;
   P->key_length    = keylen;
   P->fanout        = 1;
   P->depth         = 1;
-  store32( &P->leaf_length, 0 );
-  store64( &P->node_offset, 0 );
+  STORE32_LE( P->leaf_length, 0 );
+  STORE64_LE( P->node_offset, 0 );
   P->node_depth    = 0;
   P->inner_length  = 0;
   memset( P->reserved, 0, sizeof( P->reserved ) );
@@ -267,7 +284,7 @@ int blake2b_init_key_salt_personal( blake2b_state *S, const uint8_t outlen, cons
     memset( P->personal, 0, sizeof( P->personal ) );
   }
 
-  if( blake2b_init_param( S, P ) < 0 ) return -1;
+  if( blake2b_init_param( S, P ) < 0 ) abort();
 
   {
     uint8_t block[BLAKE2B_BLOCKBYTES];
@@ -289,19 +306,19 @@ int blake2b_update( blake2b_state *S, const uint8_t *in, uint64_t inlen )
 
     if( inlen > fill )
     {
-      memcpy( S->buf + left, in, fill ); // Fill buffer
+      memcpy( S->buf + left, in, fill ); /* Fill buffer */
       S->buflen += fill;
       blake2b_increment_counter( S, BLAKE2B_BLOCKBYTES );
-      blake2b_compress( S, S->buf ); // Compress
-      memcpy( S->buf, S->buf + BLAKE2B_BLOCKBYTES, BLAKE2B_BLOCKBYTES ); // Shift buffer left
+      blake2b_compress( S, S->buf ); /* Compress */
+      memcpy( S->buf, S->buf + BLAKE2B_BLOCKBYTES, BLAKE2B_BLOCKBYTES ); /* Shift buffer left */
       S->buflen -= BLAKE2B_BLOCKBYTES;
       in += fill;
       inlen -= fill;
     }
-    else // inlen <= fill
+    else /* inlen <= fill */
     {
       memcpy( S->buf + left, in, inlen );
-      S->buflen += inlen; // Be lazy, do not compress
+      S->buflen += inlen; /* Be lazy, do not compress */
       in += inlen;
       inlen -= inlen;
     }
@@ -313,6 +330,9 @@ int blake2b_update( blake2b_state *S, const uint8_t *in, uint64_t inlen )
 int blake2b_final( blake2b_state *S, uint8_t *out, uint8_t outlen )
 {
   if( !outlen || outlen > BLAKE2B_OUTBYTES ) {
+    abort(); /* LCOV_EXCL_LINE */
+  }
+  if( blake2b_is_lastblock( S ) ) {
     return -1;
   }
   if( S->buflen > BLAKE2B_BLOCKBYTES )
@@ -337,7 +357,7 @@ int blake2b_final( blake2b_state *S, uint8_t *out, uint8_t outlen )
     int     i;
 
     for( i = 0; i < 8; ++i ) /* Output full hash to temp buffer */
-      store64( buffer + sizeof( S->h[i] ) * i, S->h[i] );
+      STORE64_LE( buffer + sizeof( S->h[i] ) * i, S->h[i] );
     memcpy( out, buffer, outlen );
   }
 #endif
@@ -350,23 +370,23 @@ int blake2b( uint8_t *out, const void *in, const void *key, const uint8_t outlen
   blake2b_state S[1];
 
   /* Verify parameters */
-  if( NULL == in && inlen > 0 ) return -1;
+  if( NULL == in && inlen > 0 ) abort();
 
-  if( NULL == out ) return -1;
+  if( NULL == out ) abort();
 
-  if( !outlen || outlen > BLAKE2B_OUTBYTES ) return -1;
+  if( !outlen || outlen > BLAKE2B_OUTBYTES ) abort();
 
-  if( NULL == key && keylen > 0 ) return -1;
+  if( NULL == key && keylen > 0 ) abort();
 
-  if( keylen > BLAKE2B_KEYBYTES ) return -1;
+  if( keylen > BLAKE2B_KEYBYTES ) abort();
 
   if( keylen > 0 )
   {
-    if( blake2b_init_key( S, outlen, key, keylen ) < 0 ) return -1;
+    if( blake2b_init_key( S, outlen, key, keylen ) < 0 ) abort();
   }
   else
   {
-    if( blake2b_init( S, outlen ) < 0 ) return -1;
+    if( blake2b_init( S, outlen ) < 0 ) abort();
   }
 
   blake2b_update( S, ( const uint8_t * )in, inlen );
@@ -380,23 +400,23 @@ int blake2b_salt_personal( uint8_t *out, const void *in, const void *key, const 
   blake2b_state S[1];
 
   /* Verify parameters */
-  if( NULL == in && inlen > 0 ) return -1;
+  if( NULL == in && inlen > 0 ) abort();
 
-  if( NULL == out ) return -1;
+  if( NULL == out ) abort();
 
-  if( !outlen || outlen > BLAKE2B_OUTBYTES ) return -1;
+  if( !outlen || outlen > BLAKE2B_OUTBYTES ) abort();
 
-  if( NULL == key && keylen > 0 ) return -1;
+  if( NULL == key && keylen > 0 ) abort();
 
-  if( keylen > BLAKE2B_KEYBYTES ) return -1;
+  if( keylen > BLAKE2B_KEYBYTES ) abort();
 
   if( keylen > 0 )
   {
-    if( blake2b_init_key_salt_personal( S, outlen, key, keylen, salt, personal ) < 0 ) return -1;
+    if( blake2b_init_key_salt_personal( S, outlen, key, keylen, salt, personal ) < 0 ) abort();
   }
   else
   {
-    if( blake2b_init_salt_personal( S, outlen, salt, personal ) < 0 ) return -1;
+    if( blake2b_init_salt_personal( S, outlen, salt, personal ) < 0 ) abort();
   }
 
   blake2b_update( S, ( const uint8_t * )in, inlen );
@@ -407,6 +427,14 @@ int blake2b_salt_personal( uint8_t *out, const void *in, const void *key, const 
 int
 blake2b_pick_best_implementation(void)
 {
+/* LCOV_EXCL_START */
+#if (defined(HAVE_AVX2INTRIN_H) && defined(HAVE_TMMINTRIN_H) && defined(HAVE_SMMINTRIN_H)) || \
+    (defined(_MSC_VER) && (defined(_M_X64) || defined(_M_AMD64)))
+  if (sodium_runtime_has_avx2()) {
+    blake2b_compress = blake2b_compress_avx2;
+    return 0;
+  }
+#endif
 #if (defined(HAVE_EMMINTRIN_H) && defined(HAVE_TMMINTRIN_H) && defined(HAVE_SMMINTRIN_H)) || \
     (defined(_MSC_VER) && (defined(_M_X64) || defined(_M_AMD64) || defined(_M_IX86)))
   if (sodium_runtime_has_sse41()) {
@@ -424,4 +452,5 @@ blake2b_pick_best_implementation(void)
   blake2b_compress = blake2b_compress_ref;
 
   return 0;
+/* LCOV_EXCL_STOP */
 }

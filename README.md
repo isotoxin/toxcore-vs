@@ -15,7 +15,7 @@ There are some addition api functions in toxcore-vs:<br>
 
 <h4>Build</h4>
 1. Install Visual Studio 2013/2015 any desktop version (if not yet)<br />
-2. run build_libs_[13/15].cmd<br />
+2. run `build_libs_[2013/2015].cmd` to build 32 bit libs; run `build_libs_2015.cmd 64` to build 64 bit libs<br />
 
 Another way - create solution and add project (*.vcxproj) files, then build from msvs gui
 

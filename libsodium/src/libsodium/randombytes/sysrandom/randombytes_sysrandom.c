@@ -37,6 +37,10 @@ BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
 # define HAVE_SAFE_ARC4RANDOM 1
 #endif
 
+#ifndef SSIZE_MAX
+# define SSIZE_MAX (SIZE_MAX / 2 - 1)
+#endif
+
 #ifdef HAVE_SAFE_ARC4RANDOM
 
 static uint32_t
@@ -84,6 +88,7 @@ safe_read(const int fd, void * const buf_, size_t size)
     ssize_t        readnb;
 
     assert(size > (size_t) 0U);
+    assert(size <= SSIZE_MAX);
     do {
         while ((readnb = read(fd, buf, size)) < (ssize_t) 0 &&
                (errno == EINTR || errno == EAGAIN)); /* LCOV_EXCL_LINE */
@@ -145,7 +150,7 @@ randombytes_sysrandom_random_dev_open(void)
 /* LCOV_EXCL_STOP */
 }
 
-# ifdef SYS_getrandom
+# if defined(SYS_getrandom) && defined(__NR_getrandom)
 static int
 _randombytes_linux_getrandom(void * const buf, const size_t size)
 {
@@ -186,7 +191,7 @@ randombytes_sysrandom_init(void)
 {
     const int     errno_save = errno;
 
-# ifdef SYS_getrandom
+# if defined(SYS_getrandom) && defined(__NR_getrandom)
     {
         unsigned char fodder[16];
 
@@ -243,7 +248,7 @@ randombytes_sysrandom_close(void)
         stream.initialized = 0;
         ret = 0;
     }
-# ifdef SYS_getrandom
+# if defined(SYS_getrandom) && defined(__NR_getrandom)
     if (stream.getrandom_available != 0) {
         ret = 0;
     }
@@ -266,7 +271,7 @@ randombytes_sysrandom_buf(void * const buf, const size_t size)
     assert(size <= ULONG_LONG_MAX);
 #endif
 #ifndef _WIN32
-# ifdef SYS_getrandom
+# if defined(SYS_getrandom) && defined(__NR_getrandom)
     if (stream.getrandom_available != 0) {
         if (randombytes_linux_getrandom(buf, size) != 0) {
             abort();
