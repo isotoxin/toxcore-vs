@@ -25,9 +25,9 @@
 #ifndef FRIEND_CONNECTION_H
 #define FRIEND_CONNECTION_H
 
-#include "net_crypto.h"
 #include "DHT.h"
 #include "LAN_discovery.h"
+#include "net_crypto.h"
 #include "onion_client.h"
 
 #ifndef TOX_CLIENT_CAPS_SIZE
@@ -87,7 +87,7 @@ typedef struct {
         void *status_callback_object;
         int status_callback_id;
 
-        int (*data_callback)(void *object, int id, uint8_t *data, uint16_t length);
+        int (*data_callback)(void *object, int id, uint8_t *data, uint16_t length, void *userdata);
         void *data_callback_object;
         int data_callback_id;
 
@@ -163,7 +163,8 @@ int friend_add_tcp_relay(Friend_Connections *fr_c, int friendcon_id, IP_Port ip_
  */
 int friend_connection_callbacks(Friend_Connections *fr_c, int friendcon_id, unsigned int index,
                                 int (*status_callback)(void *object, int id, uint8_t status), int (*data_callback)(void *object, int id, uint8_t *data,
-                                        uint16_t length), int (*lossy_data_callback)(void *object, int id, const uint8_t *data, uint16_t length), void *object,
+                                        uint16_t length, void *userdata), int (*lossy_data_callback)(void *object, int id, const uint8_t *data,
+                                                uint16_t length), void *object,
                                 int number);
 
 /* return the crypt_connection_id for the connection.

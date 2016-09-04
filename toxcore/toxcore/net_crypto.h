@@ -24,10 +24,11 @@
 #ifndef NET_CRYPTO_H
 #define NET_CRYPTO_H
 
+#include <pthread.h>
 #include "DHT.h"
 #include "LAN_discovery.h"
 #include "TCP_connection.h"
-#include <pthread.h>
+#include "logger.h"
 
 #define CRYPTO_CONN_NO_CONNECTION 0
 #define CRYPTO_CONN_COOKIE_REQUESTING 1 //send cookie request packets
@@ -134,7 +135,7 @@ typedef struct {
     void *connection_status_callback_object;
     int connection_status_callback_id;
 
-    int (*connection_data_callback)(void *object, int id, uint8_t *data, uint16_t length);
+    int (*connection_data_callback)(void *object, int id, uint8_t *data, uint16_t length, void *userdata);
     void *connection_data_callback_object;
     int connection_data_callback_id;
 
@@ -189,6 +190,8 @@ typedef struct {
 } New_Connection;
 
 typedef struct {
+    Logger *log;
+
     DHT *dht;
     TCP_Connections *tcp_c;
 
@@ -272,7 +275,7 @@ int connection_status_handler(const Net_Crypto *c, int crypt_connection_id,
  * return 0 on success.
  */
 int connection_data_handler(const Net_Crypto *c, int crypt_connection_id, int (*connection_data_callback)(void *object,
-                            int id, uint8_t *data, uint16_t length), void *object, int id);
+                            int id, uint8_t *data, uint16_t length, void *userdata), void *object, int id);
 
 
 /* Set function to be called when connection with crypt_connection_id receives a lossy data packet of length.
@@ -367,7 +370,7 @@ int get_random_tcp_con_number(Net_Crypto *c);
  * return 0 on success.
  * return -1 on failure.
  */
-int send_tcp_onion_request(Net_Crypto *c, unsigned int TCP_conn_number, const uint8_t *data, uint16_t length);
+int send_tcp_onion_request(Net_Crypto *c, unsigned int tcp_connections_number, const uint8_t *data, uint16_t length);
 
 /* Copy a maximum of num TCP relays we are connected to to tcp_relays.
  * NOTE that the family of the copied ip ports will be set to TCP_INET or TCP_INET6.
@@ -410,14 +413,14 @@ void load_secret_key(Net_Crypto *c, const uint8_t *sk);
 /* Create new instance of Net_Crypto.
  *  Sets all the global connection variables to their default values.
  */
-Net_Crypto *new_net_crypto(DHT *dht, TCP_Proxy_Info *proxy_info);
+Net_Crypto *new_net_crypto(Logger *log, DHT *dht, TCP_Proxy_Info *proxy_info);
 
 /* return the optimal interval in ms for running do_net_crypto.
  */
 uint32_t crypto_run_interval(const Net_Crypto *c);
 
 /* Main loop. */
-void do_net_crypto(Net_Crypto *c);
+void do_net_crypto(Net_Crypto *c, void *userdata);
 
 void kill_net_crypto(Net_Crypto *c);
 

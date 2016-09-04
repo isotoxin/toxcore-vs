@@ -25,13 +25,16 @@
 #define NETWORK_H
 
 #ifdef PLAN9
-#include <u.h> //Plan 9 requires this is imported first
+#include <u.h> // Plan 9 requires this is imported first
+// Comment line here to avoid reordering by source code formatters.
 #include <libc.h>
 #endif
 
-#include <stdlib.h>
-#include <stdio.h>
+#include "logger.h"
+
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -58,14 +61,14 @@ typedef short sa_family_t;
 
 #else // Linux includes
 
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <netdb.h>
 #include <unistd.h>
 
 typedef int sock_t;
@@ -290,7 +293,8 @@ int addr_resolve_or_parse_ip(const char *address, IP *to, IP *extra);
  * Packet data is put into data.
  * Packet length is put into length.
  */
-typedef int (*packet_handler_callback)(void *object, IP_Port ip_port, const uint8_t *data, uint16_t len);
+typedef int (*packet_handler_callback)(void *object, IP_Port ip_port, const uint8_t *data, uint16_t len,
+                                       void *userdata);
 
 typedef struct {
     packet_handler_callback function;
@@ -298,6 +302,7 @@ typedef struct {
 } Packet_Handles;
 
 typedef struct {
+    Logger *log;
     Packet_Handles packethandlers[256];
 
     sa_family_t family;
@@ -364,7 +369,7 @@ int sendpacket(Networking_Core *net, IP_Port ip_port, const uint8_t *data, uint1
 void networking_registerhandler(Networking_Core *net, uint8_t byte, packet_handler_callback cb, void *object);
 
 /* Call this several times a second. */
-void networking_poll(Networking_Core *net);
+void networking_poll(Networking_Core *net, void *userdata);
 
 /* Initialize networking.
  * bind to ip and port.
@@ -376,8 +381,8 @@ void networking_poll(Networking_Core *net);
  *
  * If error is non NULL it is set to 0 if no issues, 1 if socket related error, 2 if other.
  */
-Networking_Core *new_networking(IP ip, uint16_t port);
-Networking_Core *new_networking_ex(IP ip, uint16_t port_from, uint16_t port_to, unsigned int *error);
+Networking_Core *new_networking(Logger *log, IP ip, uint16_t port);
+Networking_Core *new_networking_ex(Logger *log, IP ip, uint16_t port_from, uint16_t port_to, unsigned int *error);
 
 /* Function to cleanup networking stuff (doesn't do much right now). */
 void kill_networking(Networking_Core *net);

@@ -22,8 +22,8 @@
 #ifndef RTP_H
 #define RTP_H
 
-#include "bwcontroller.h"
 #include "../toxcore/Messenger.h"
+#include "bwcontroller.h"
 #include "stdbool.h"
 
 /**
@@ -99,7 +99,7 @@ typedef struct {
 } RTPSession;
 
 
-RTPSession *rtp_new (int payload_type, Messenger *m, uint32_t friend_num,
+RTPSession *rtp_new (int payload_type, Messenger *m, uint32_t friendnumber,
                      BWController *bwc, void *cs,
                      int (*mcb) (void *, struct RTPMessage *));
 void rtp_kill (RTPSession *session);

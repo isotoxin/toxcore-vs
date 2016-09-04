@@ -40,8 +40,9 @@ static uint64_t unix_base_time_value;
 
 void unix_time_update()
 {
-    if (unix_base_time_value == 0)
+    if (unix_base_time_value == 0) {
         unix_base_time_value = ((uint64_t)time(NULL) - (current_time_monotonic() / 1000ULL));
+    }
 
     unix_time_value = (current_time_monotonic() / 1000ULL) + unix_base_time_value;
 }
@@ -81,7 +82,6 @@ void host_to_net(uint8_t *num, uint16_t numbytes)
 
     memcpy(num, buff, numbytes);
 #endif
-    return;
 }
 
 uint16_t lendian_to_host16(uint16_t lendian)
@@ -118,7 +118,7 @@ int load_state(load_state_callback_func load_state_callback, void *outer,
                const uint8_t *data, uint32_t length, uint16_t cookie_inner)
 {
     if (!load_state_callback || !data) {
-#ifdef DEBUG
+#ifdef TOX_DEBUG
         fprintf(stderr, "load_state() called with invalid args.\n");
 #endif
         return -1;
@@ -137,7 +137,7 @@ int load_state(load_state_callback_func load_state_callback, void *outer,
 
         if (length < length_sub) {
             /* file truncated */
-#ifdef DEBUG
+#ifdef TOX_DEBUG
             fprintf(stderr, "state file too short: %u < %u\n", length, length_sub);
 #endif
             return -1;
@@ -146,7 +146,7 @@ int load_state(load_state_callback_func load_state_callback, void *outer,
         if (lendian_to_host16((cookie_type >> 16)) != cookie_inner) {
             /* something is not matching up in a bad way, give up */
 #ifdef DEBUG
-            fprintf(stderr, "state file garbeled: %04hx != %04hx\n", (cookie_type >> 16), cookie_inner);
+            fprintf(stderr, "state file garbled: %04x != %04x\n", (cookie_type >> 16), cookie_inner);
 #endif
             return -1;
         }
@@ -160,8 +160,9 @@ int load_state(load_state_callback_func load_state_callback, void *outer,
         }
 
         /* -2 means end of save. */
-        if (ret == -2)
+        if (ret == -2) {
             return 0;
+        }
 
         data += length_sub;
         length -= length_sub;
@@ -174,8 +175,9 @@ int create_recursive_mutex(pthread_mutex_t *mutex)
 {
     pthread_mutexattr_t attr;
 
-    if (pthread_mutexattr_init(&attr) != 0)
+    if (pthread_mutexattr_init(&attr) != 0) {
         return -1;
+    }
 
     if (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) != 0) {
         pthread_mutexattr_destroy(&attr);
@@ -213,14 +215,16 @@ void *rb_write(RingBuffer *b, void *p)
 {
     void *rc = NULL;
 
-    if ((b->end + 1) % b->size == b->start) /* full */
+    if ((b->end + 1) % b->size == b->start) { /* full */
         rc = b->data[b->start];
+    }
 
     b->data[b->end] = p;
     b->end = (b->end + 1) % b->size;
 
-    if (b->end == b->start)
+    if (b->end == b->start) {
         b->start = (b->start + 1) % b->size;
+    }
 
     return rc;
 }
@@ -239,7 +243,9 @@ RingBuffer *rb_new(int size)
 {
     RingBuffer *buf = calloc(sizeof(RingBuffer), 1);
 
-    if (!buf) return NULL;
+    if (!buf) {
+        return NULL;
+    }
 
     buf->size = size + 1; /* include empty elem */
 
@@ -259,8 +265,9 @@ void rb_kill(RingBuffer *b)
 }
 uint16_t rb_size(const RingBuffer *b)
 {
-    if (rb_empty(b))
+    if (rb_empty(b)) {
         return 0;
+    }
 
     return
         b->end > b->start ?
@@ -271,8 +278,9 @@ uint16_t rb_data(const RingBuffer *b, void **dest)
 {
     uint16_t i = 0;
 
-    for (; i < rb_size(b); i++)
+    for (; i < rb_size(b); i++) {
         dest[i] = b->data[(b->start + i) % b->size];
+    }
 
     return i;
 }
