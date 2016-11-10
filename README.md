@@ -4,8 +4,12 @@ All necessary libs to build static toxcore using Visual Studio 2013/2015
 
 <h4>Differences from the original toxcore</h4>
 
-Main difference is: `tox_new` has addition `const char *` parameter:<br>
-`Tox *tox_new(const char * client_capabilities, const struct Tox_Options *options, TOX_ERR_NEW *error);`<br>
+Current version of toxcore is toktok based, but has some advatages.
+
+Main advantage is *PERSISTEN GROUPCHATS* compatible with current groupchats.
+
+`Tox_Options` has addition `const char *` parameter:<br>
+`const char * client_capabilities`<br>
 if `client_capabilities` is NULL, toxcore-vs works identically to original one. You can provide non-NULL static string with `TOX_CLIENT_CAPS_SIZE` maximum length, and this string will be sent to another contact whenever the state of the contact becomes online. Other client can read this string with `tox_friend_get_client_caps`. This is way, that clients can identify clients to enable client-scpecific features.
 
 There are some addition api functions in toxcore-vs:<br>
