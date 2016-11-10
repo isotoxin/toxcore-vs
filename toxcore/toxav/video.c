@@ -23,22 +23,25 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
-#include <assert.h>
-#include <stdlib.h>
+#include "video.h"
 
 #include "msi.h"
+#include "ring_buffer.h"
 #include "rtp.h"
-#include "video.h"
 
 #include "../toxcore/logger.h"
 #include "../toxcore/network.h"
+
+#include <assert.h>
+#include <stdlib.h>
 
 #define MAX_DECODE_TIME_US 0 /* Good quality encode. */
 #define VIDEO_DECODE_BUFFER_SIZE 20
 
 VCSession *vc_new(Logger *log, ToxAV *av, uint32_t friend_number, toxav_video_receive_frame_cb *cb, void *cb_data)
 {
-    VCSession *vc = calloc(sizeof(VCSession), 1);
+    VCSession *vc = (VCSession *)calloc(sizeof(VCSession), 1);
+    vpx_codec_err_t rc;
 
     if (!vc) {
         LOGGER_WARNING(log, "Allocation failed! Application might misbehave!");
@@ -55,7 +58,7 @@ VCSession *vc_new(Logger *log, ToxAV *av, uint32_t friend_number, toxav_video_re
         goto BASE_CLEANUP;
     }
 
-    int rc = vpx_codec_dec_init(vc->decoder, VIDEO_CODEC_DECODER_INTERFACE, NULL, 0);
+    rc = vpx_codec_dec_init(vc->decoder, VIDEO_CODEC_DECODER_INTERFACE, NULL, 0);
 
     if (rc != VPX_CODEC_OK) {
         LOGGER_ERROR(log, "Init video_decoder failed: %s", vpx_codec_err_to_string(rc));
@@ -76,9 +79,11 @@ VCSession *vc_new(Logger *log, ToxAV *av, uint32_t friend_number, toxav_video_re
     cfg.g_w = 800;
     cfg.g_h = 600;
     cfg.g_pass = VPX_RC_ONE_PASS;
-    /* FIXME If we set error resilience the app will crash due to bug in vp8.
-             Perhaps vp9 has solved it?*/
-//     cfg.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT | VPX_ERROR_RESILIENT_PARTITIONS;
+    /* TODO(mannol): If we set error resilience the app will crash due to bug in vp8.
+       Perhaps vp9 has solved it?*/
+#if 0
+    cfg.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT | VPX_ERROR_RESILIENT_PARTITIONS;
+#endif
     cfg.g_lag_in_frames = 0;
     cfg.kf_min_dist = 0;
     cfg.kf_max_dist = 48;
@@ -113,7 +118,7 @@ BASE_CLEANUP_1:
     vpx_codec_destroy(vc->decoder);
 BASE_CLEANUP:
     pthread_mutex_destroy(vc->queue_mutex);
-    rb_kill(vc->vbuf_raw);
+    rb_kill((RingBuffer *)vc->vbuf_raw);
     free(vc);
     return NULL;
 }
@@ -128,11 +133,11 @@ void vc_kill(VCSession *vc)
 
     void *p;
 
-    while (rb_read(vc->vbuf_raw, &p)) {
+    while (rb_read((RingBuffer *)vc->vbuf_raw, &p)) {
         free(p);
     }
 
-    rb_kill(vc->vbuf_raw);
+    rb_kill((RingBuffer *)vc->vbuf_raw);
 
     pthread_mutex_destroy(vc->queue_mutex);
 
@@ -147,11 +152,11 @@ void vc_iterate(VCSession *vc)
 
     struct RTPMessage *p;
 
-    int rc;
+    vpx_codec_err_t rc;
 
     pthread_mutex_lock(vc->queue_mutex);
 
-    if (rb_read(vc->vbuf_raw, (void **)&p)) {
+    if (rb_read((RingBuffer *)vc->vbuf_raw, (void **)&p)) {
         pthread_mutex_unlock(vc->queue_mutex);
 
         rc = vpx_codec_decode(vc->decoder, p->data, p->len, NULL, MAX_DECODE_TIME_US);
@@ -189,7 +194,7 @@ int vc_queue_message(void *vcp, struct RTPMessage *msg)
         return -1;
     }
 
-    VCSession *vc = vcp;
+    VCSession *vc = (VCSession *)vcp;
 
     if (msg->header.pt == (rtp_TypeVideo + 2) % 128) {
         LOGGER_WARNING(vc->log, "Got dummy!");
@@ -204,7 +209,7 @@ int vc_queue_message(void *vcp, struct RTPMessage *msg)
     }
 
     pthread_mutex_lock(vc->queue_mutex);
-    free(rb_write(vc->vbuf_raw, msg));
+    free(rb_write((RingBuffer *)vc->vbuf_raw, msg));
     {
         /* Calculate time took for peer to send us this frame */
         uint32_t t_lcfd = current_time_monotonic() - vc->linfts;
@@ -222,7 +227,7 @@ int vc_reconfigure_encoder(VCSession *vc, uint32_t bit_rate, uint16_t width, uin
     }
 
     vpx_codec_enc_cfg_t cfg = *vc->encoder->config.enc;
-    int rc;
+    vpx_codec_err_t rc;
 
     if (cfg.rc_target_bitrate == bit_rate && cfg.g_w == width && cfg.g_h == height) {
         return 0; /* Nothing changed */

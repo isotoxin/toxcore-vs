@@ -26,6 +26,7 @@
 #endif
 
 #include "LAN_discovery.h"
+
 #include "util.h"
 
 /* Used for get_broadcast(). */
@@ -49,8 +50,8 @@ static void fetch_broadcast_info(uint16_t port)
 {
     broadcast_count = 0;
 
-    IP_ADAPTER_INFO *pAdapterInfo = malloc(sizeof(pAdapterInfo));
-    unsigned long ulOutBufLen = sizeof(pAdapterInfo);
+    IP_ADAPTER_INFO *pAdapterInfo = (IP_ADAPTER_INFO *)malloc(sizeof(IP_ADAPTER_INFO));
+    unsigned long ulOutBufLen = sizeof(IP_ADAPTER_INFO);
 
     if (pAdapterInfo == NULL) {
         return;
@@ -58,7 +59,7 @@ static void fetch_broadcast_info(uint16_t port)
 
     if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW) {
         free(pAdapterInfo);
-        pAdapterInfo = malloc(ulOutBufLen);
+        pAdapterInfo = (IP_ADAPTER_INFO *)malloc(ulOutBufLen);
 
         if (pAdapterInfo == NULL) {
             return;
@@ -167,7 +168,7 @@ static void fetch_broadcast_info(uint16_t port)
     close(sock);
 }
 
-#else //TODO: Other platforms?
+#else // TODO(irungentoo): Other platforms?
 
 static void fetch_broadcast_info(uint16_t port)
 {
@@ -234,7 +235,7 @@ static IP broadcast_ip(sa_family_t family_socket, sa_family_t family_broadcast)
 }
 
 /* Is IP a local ip or not. */
-_Bool Local_ip(IP ip)
+bool Local_ip(IP ip)
 {
     if (ip.family == AF_INET) {
         IP4 ip4 = ip.ip4;
@@ -322,7 +323,7 @@ int LAN_ip(IP ip)
 
 static int handle_LANdiscovery(void *object, IP_Port source, const uint8_t *packet, uint16_t length, void *userdata)
 {
-    DHT *dht = object;
+    DHT *dht = (DHT *)object;
 
     if (LAN_ip(source.ip) == -1) {
         return 1;

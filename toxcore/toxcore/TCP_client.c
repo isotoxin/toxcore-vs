@@ -26,11 +26,11 @@
 
 #include "TCP_client.h"
 
+#include "util.h"
+
 #if !defined(_WIN32) && !defined(__WIN32__) && !defined (WIN32)
 #include <sys/ioctl.h>
 #endif
-
-#include "util.h"
 
 /* return 1 on success
  * return 0 on failure
@@ -152,7 +152,7 @@ static int socks5_read_handshake_response(TCP_Client_Connection *TCP_conn)
         return 0;
     }
 
-    if (data[0] == 5 && data[1] == 0) { // FIXME magic numbers
+    if (data[0] == 5 && data[1] == 0) { // TODO(irungentoo): magic numbers
         return 1;
     }
 
@@ -228,7 +228,7 @@ static int generate_handshake(TCP_Client_Connection *TCP_conn)
     random_nonce(TCP_conn->sent_nonce);
     memcpy(plain + crypto_box_PUBLICKEYBYTES, TCP_conn->sent_nonce, crypto_box_NONCEBYTES);
     memcpy(TCP_conn->last_packet, TCP_conn->self_public_key, crypto_box_PUBLICKEYBYTES);
-    new_nonce(TCP_conn->last_packet + crypto_box_PUBLICKEYBYTES);
+    random_nonce(TCP_conn->last_packet + crypto_box_PUBLICKEYBYTES);
     int len = encrypt_data_symmetric(TCP_conn->shared_key, TCP_conn->last_packet + crypto_box_PUBLICKEYBYTES, plain,
                                      sizeof(plain), TCP_conn->last_packet + crypto_box_PUBLICKEYBYTES + crypto_box_NONCEBYTES);
 
@@ -272,7 +272,7 @@ static int send_pending_data_nonpriority(TCP_Client_Connection *con)
     }
 
     uint16_t left = con->last_packet_length - con->last_packet_sent;
-    int len = send(con->sock, con->last_packet + con->last_packet_sent, left, MSG_NOSIGNAL);
+    int len = send(con->sock, (const char *)(con->last_packet + con->last_packet_sent), left, MSG_NOSIGNAL);
 
     if (len <= 0) {
         return -1;
@@ -302,7 +302,7 @@ static int send_pending_data(TCP_Client_Connection *con)
 
     while (p) {
         uint16_t left = p->size - p->sent;
-        int len = send(con->sock, p->data + p->sent, left, MSG_NOSIGNAL);
+        int len = send(con->sock, (const char *)(p->data + p->sent), left, MSG_NOSIGNAL);
 
         if (len != left) {
             if (len > 0) {
@@ -330,27 +330,27 @@ static int send_pending_data(TCP_Client_Connection *con)
 /* return 0 on failure (only if malloc fails)
  * return 1 on success
  */
-static _Bool add_priority(TCP_Client_Connection *con, const uint8_t *packet, uint16_t size, uint16_t sent)
+static bool add_priority(TCP_Client_Connection *con, const uint8_t *packet, uint16_t size, uint16_t sent)
 {
-    TCP_Priority_List *p = con->priority_queue_end, *new;
-    new = malloc(sizeof(TCP_Priority_List) + size);
+    TCP_Priority_List *p = con->priority_queue_end;
+    TCP_Priority_List *new_list = (TCP_Priority_List *)malloc(sizeof(TCP_Priority_List) + size);
 
-    if (!new) {
+    if (!new_list) {
         return 0;
     }
 
-    new->next = NULL;
-    new->size = size;
-    new->sent = sent;
-    memcpy(new->data, packet, size);
+    new_list->next = NULL;
+    new_list->size = size;
+    new_list->sent = sent;
+    memcpy(new_list->data, packet, size);
 
     if (p) {
-        p->next = new;
+        p->next = new_list;
     } else {
-        con->priority_queue_start = new;
+        con->priority_queue_start = new_list;
     }
 
-    con->priority_queue_end = new;
+    con->priority_queue_end = new_list;
     return 1;
 }
 
@@ -370,13 +370,13 @@ static void wipe_priority_list(TCP_Client_Connection *con)
  * return -1 on failure (connection must be killed).
  */
 static int write_packet_TCP_secure_connection(TCP_Client_Connection *con, const uint8_t *data, uint16_t length,
-        _Bool priority)
+        bool priority)
 {
     if (length + crypto_box_MACBYTES > MAX_PACKET_SIZE) {
         return -1;
     }
 
-    _Bool sendpriority = 1;
+    bool sendpriority = 1;
 
     if (send_pending_data(con) == -1) {
         if (priority) {
@@ -397,7 +397,7 @@ static int write_packet_TCP_secure_connection(TCP_Client_Connection *con, const 
     }
 
     if (priority) {
-        len = sendpriority ? send(con->sock, packet, sizeOf(packet), MSG_NOSIGNAL) : 0;
+        len = sendpriority ? send(con->sock, (const char *)packet, sizeOf(packet), MSG_NOSIGNAL) : 0;
 
         if (len <= 0) {
             len = 0;
@@ -412,7 +412,7 @@ static int write_packet_TCP_secure_connection(TCP_Client_Connection *con, const 
         return add_priority(con, packet, sizeOf(packet), len);
     }
 
-    len = send(con->sock, packet, sizeOf(packet), MSG_NOSIGNAL);
+    len = send(con->sock, (const char *)packet, sizeOf(packet), MSG_NOSIGNAL);
 
     if (len <= 0) {
         return 0;
@@ -668,7 +668,7 @@ TCP_Client_Connection *new_TCP_connection(IP_Port ip_port, const uint8_t *public
         return NULL;
     }
 
-    TCP_Client_Connection *temp = calloc(sizeof(TCP_Client_Connection), 1);
+    TCP_Client_Connection *temp = (TCP_Client_Connection *)calloc(sizeof(TCP_Client_Connection), 1);
 
     if (temp == NULL) {
         kill_sock(sock);

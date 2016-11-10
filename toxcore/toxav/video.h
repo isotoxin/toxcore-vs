@@ -22,6 +22,11 @@
 #ifndef VIDEO_H
 #define VIDEO_H
 
+#include "toxav.h"
+
+#include "../toxcore/logger.h"
+#include "../toxcore/util.h"
+
 #include <vpx/vpx_decoder.h>
 #include <vpx/vpx_encoder.h>
 #include <vpx/vpx_image.h>
@@ -33,12 +38,8 @@
 
 #include <pthread.h>
 
-#include "toxav.h"
-
-#include "../toxcore/logger.h"
-#include "../toxcore/util.h"
-
 struct RTPMessage;
+struct RingBuffer;
 
 typedef struct VCSession_s {
     /* encoding */
@@ -47,7 +48,7 @@ typedef struct VCSession_s {
 
     /* decoding */
     vpx_codec_ctx_t decoder[1];
-    void *vbuf_raw; /* Un-decoded data */
+    struct RingBuffer *vbuf_raw; /* Un-decoded data */
 
     uint64_t linfts; /* Last received frame time stamp */
     uint32_t lcfd; /* Last calculated frame duration for incoming video payload */

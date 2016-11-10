@@ -23,19 +23,20 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-
 #include "audio.h"
+
 #include "rtp.h"
 
 #include "../toxcore/logger.h"
+
+#include <stdlib.h>
 
 static struct JitterBuffer *jbuf_new(uint32_t capacity);
 static void jbuf_clear(struct JitterBuffer *q);
 static void jbuf_free(struct JitterBuffer *q);
 static int jbuf_write(Logger *log, struct JitterBuffer *q, struct RTPMessage *m);
 static struct RTPMessage *jbuf_read(struct JitterBuffer *q, int32_t *success);
-OpusEncoder *create_audio_encoder (Logger *log, int32_t bit_rate, int32_t sampling_rate, int32_t channel_count);
+OpusEncoder *create_audio_encoder(Logger *log, int32_t bit_rate, int32_t sampling_rate, int32_t channel_count);
 bool reconfigure_audio_encoder(Logger *log, OpusEncoder **e, int32_t new_br, int32_t new_sr, uint8_t new_ch,
                                int32_t *old_br, int32_t *old_sr, int32_t *old_ch);
 bool reconfigure_audio_decoder(ACSession *ac, int32_t sampling_rate, int8_t channels);
@@ -44,7 +45,7 @@ bool reconfigure_audio_decoder(ACSession *ac, int32_t sampling_rate, int8_t chan
 
 ACSession *ac_new(Logger *log, ToxAV *av, uint32_t friend_number, toxav_audio_receive_frame_cb *cb, void *cb_data)
 {
-    ACSession *ac = calloc(sizeof(ACSession), 1);
+    ACSession *ac = (ACSession *)calloc(sizeof(ACSession), 1);
 
     if (!ac) {
         LOGGER_WARNING(log, "Allocation failed! Application might misbehave!");
@@ -103,7 +104,7 @@ ACSession *ac_new(Logger *log, ToxAV *av, uint32_t friend_number, toxav_audio_re
 
 DECODER_CLEANUP:
     opus_decoder_destroy(ac->decoder);
-    jbuf_free(ac->j_buf);
+    jbuf_free((struct JitterBuffer *)ac->j_buf);
 BASE_CLEANUP:
     pthread_mutex_destroy(ac->queue_mutex);
     free(ac);
@@ -117,7 +118,7 @@ void ac_kill(ACSession *ac)
 
     opus_encoder_destroy(ac->encoder);
     opus_decoder_destroy(ac->decoder);
-    jbuf_free(ac->j_buf);
+    jbuf_free((struct JitterBuffer *)ac->j_buf);
 
     pthread_mutex_destroy(ac->queue_mutex);
 
@@ -130,7 +131,7 @@ void ac_iterate(ACSession *ac)
         return;
     }
 
-    /* TODO fix this and jitter buffering */
+    /* TODO(mannol): fix this and jitter buffering */
 
     /* Enough space for the maximum frame size (120 ms 48 KHz stereo audio) */
     int16_t tmp[5760 * 2];
@@ -140,7 +141,7 @@ void ac_iterate(ACSession *ac)
 
     pthread_mutex_lock(ac->queue_mutex);
 
-    while ((msg = jbuf_read(ac->j_buf, &rc)) || rc == 2) {
+    while ((msg = jbuf_read((struct JitterBuffer *)ac->j_buf, &rc)) || rc == 2) {
         pthread_mutex_unlock(ac->queue_mutex);
 
         if (rc == 2) {
@@ -203,7 +204,7 @@ int ac_queue_message(void *acp, struct RTPMessage *msg)
         return -1;
     }
 
-    ACSession *ac = acp;
+    ACSession *ac = (ACSession *)acp;
 
     if ((msg->header.pt & 0x7f) == (rtp_TypeAudio + 2) % 128) {
         LOGGER_WARNING(ac->log, "Got dummy!");
@@ -218,7 +219,7 @@ int ac_queue_message(void *acp, struct RTPMessage *msg)
     }
 
     pthread_mutex_lock(ac->queue_mutex);
-    int rc = jbuf_write(ac->log, ac->j_buf, msg);
+    int rc = jbuf_write(ac->log, (struct JitterBuffer *)ac->j_buf, msg);
     pthread_mutex_unlock(ac->queue_mutex);
 
     if (rc == -1) {
@@ -260,13 +261,15 @@ static struct JitterBuffer *jbuf_new(uint32_t capacity)
         size *= 2;
     }
 
-    struct JitterBuffer *q;
+    struct JitterBuffer *q = (struct JitterBuffer *)calloc(sizeof(struct JitterBuffer), 1);
 
-    if (!(q = calloc(sizeof(struct JitterBuffer), 1))) {
+    if (!q) {
         return NULL;
     }
 
-    if (!(q->queue = calloc(sizeof(struct RTPMessage *), size))) {
+    q->queue = (struct RTPMessage **)calloc(sizeof(struct RTPMessage *), size);
+
+    if (!q->queue) {
         free(q);
         return NULL;
     }
@@ -348,7 +351,7 @@ static struct RTPMessage *jbuf_read(struct JitterBuffer *q, int32_t *success)
     *success = 0;
     return NULL;
 }
-OpusEncoder *create_audio_encoder (Logger *log, int32_t bit_rate, int32_t sampling_rate, int32_t channel_count)
+OpusEncoder *create_audio_encoder(Logger *log, int32_t bit_rate, int32_t sampling_rate, int32_t channel_count)
 {
     int status = OPUS_OK;
     OpusEncoder *rc = opus_encoder_create(sampling_rate, channel_count, OPUS_APPLICATION_VOIP, &status);

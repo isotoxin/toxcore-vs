@@ -26,8 +26,9 @@
 #include "config.h"
 #endif
 
-#include "crypto_core.h"
 #include "ping_array.h"
+
+#include "crypto_core.h"
 #include "util.h"
 
 static void clear_entry(Ping_Array *array, uint32_t index)
@@ -144,7 +145,7 @@ int ping_array_init(Ping_Array *empty_array, uint32_t size, uint32_t timeout)
         return -1;
     }
 
-    empty_array->entries = calloc(size, sizeof(Ping_Array_Entry));
+    empty_array->entries = (Ping_Array_Entry *)calloc(size, sizeof(Ping_Array_Entry));
 
     if (empty_array->entries == NULL) {
         return -1;

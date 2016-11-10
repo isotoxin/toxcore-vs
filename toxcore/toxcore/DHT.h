@@ -29,6 +29,8 @@
 #include "network.h"
 #include "ping_array.h"
 
+#include <stdbool.h>
+
 /* Maximum number of clients stored per friend. */
 #define MAX_FRIEND_CLIENTS 8
 
@@ -65,6 +67,33 @@
 
 /* The number of "fake" friends to add (for optimization purposes and so our paths for the onion part are more random) */
 #define DHT_FAKE_FRIEND_NUMBER 2
+
+#define MAX_CRYPTO_REQUEST_SIZE 1024
+
+#define CRYPTO_PACKET_FRIEND_REQ    32  /* Friend request crypto packet ID. */
+#define CRYPTO_PACKET_HARDENING     48  /* Hardening crypto packet ID. */
+#define CRYPTO_PACKET_DHTPK         156
+#define CRYPTO_PACKET_NAT_PING      254 /* NAT ping crypto packet ID. */
+
+/* Create a request to peer.
+ * send_public_key and send_secret_key are the pub/secret keys of the sender.
+ * recv_public_key is public key of receiver.
+ * packet must be an array of MAX_CRYPTO_REQUEST_SIZE big.
+ * Data represents the data we send with the request with length being the length of the data.
+ * request_id is the id of the request (32 = friend request, 254 = ping request).
+ *
+ * return -1 on failure.
+ * return the length of the created packet on success.
+ */
+int create_request(const uint8_t *send_public_key, const uint8_t *send_secret_key, uint8_t *packet,
+                   const uint8_t *recv_public_key, const uint8_t *data, uint32_t length, uint8_t request_id);
+
+/* puts the senders public key in the request in public_key, the data from the request
+   in data if a friend or ping request was sent to us and returns the length of the data.
+   packet is the request packet and length is its length
+   return -1 if not valid request. */
+int handle_request(const uint8_t *self_public_key, const uint8_t *self_secret_key, uint8_t *public_key, uint8_t *data,
+                   uint8_t *request_id, const uint8_t *packet, uint16_t length);
 
 /* Functions to transfer ips safely across wire. */
 void to_net_family(IP *ip);
@@ -198,7 +227,7 @@ typedef struct {
 /*----------------------------------------------------------------------------------*/
 
 typedef int (*cryptopacket_handler_callback)(void *object, IP_Port ip_port, const uint8_t *source_pubkey,
-        const uint8_t *data, uint16_t len);
+        const uint8_t *data, uint16_t len, void *userdata);
 
 typedef struct {
     cryptopacket_handler_callback function;
@@ -232,9 +261,6 @@ typedef struct {
     struct PING   *ping;
     Ping_Array    dht_ping_array;
     Ping_Array    dht_harden_ping_array;
-#ifdef ENABLE_ASSOC_DHT
-    struct Assoc  *assoc;
-#endif
     uint64_t       last_run;
 
     Cryptopacket_Handles cryptopackethandlers[256];
@@ -311,19 +337,19 @@ int id_closest(const uint8_t *pk, const uint8_t *pk1, const uint8_t *pk2);
 
 /* Add node to the node list making sure only the nodes closest to cmp_pk are in the list.
  */
-_Bool add_to_list(Node_format *nodes_list, unsigned int length, const uint8_t *pk, IP_Port ip_port,
-                  const uint8_t *cmp_pk);
+bool add_to_list(Node_format *nodes_list, unsigned int length, const uint8_t *pk, IP_Port ip_port,
+                 const uint8_t *cmp_pk);
 
 /* Return 1 if node can be added to close list, 0 if it can't.
  */
-_Bool node_addable_to_close_list(DHT *dht, const uint8_t *public_key, IP_Port ip_port);
+bool node_addable_to_close_list(DHT *dht, const uint8_t *public_key, IP_Port ip_port);
 
 /* Get the (maximum MAX_SENT_NODES) closest nodes to public_key we know
  * and put them in nodes_list (must be MAX_SENT_NODES big).
  *
  * sa_family = family (IPv4 or IPv6) (0 if we don't care)?
  * is_LAN = return some LAN ips (true or false)
- * want_good = do we want tested nodes or not? (TODO)
+ * want_good = do we want tested nodes or not? (TODO(irungentoo))
  *
  * return the number of nodes returned.
  *
@@ -427,4 +453,3 @@ int DHT_non_lan_connected(const DHT *dht);
 int addto_lists(DHT *dht, IP_Port ip_port, const uint8_t *public_key);
 
 #endif
-

@@ -26,19 +26,18 @@
 #include "config.h"
 #endif
 
-#include <time.h>
-
-/* for crypto_box_PUBLICKEYBYTES */
-#include "crypto_core.h"
-
 #include "util.h"
+
+#include "crypto_core.h" /* for crypto_box_PUBLICKEYBYTES */
+
+#include <time.h>
 
 
 /* don't call into system billions of times for no reason */
 static uint64_t unix_time_value;
 static uint64_t unix_base_time_value;
 
-void unix_time_update()
+void unix_time_update(void)
 {
     if (unix_base_time_value == 0) {
         unix_base_time_value = ((uint64_t)time(NULL) - (current_time_monotonic() / 1000ULL));
@@ -47,7 +46,7 @@ void unix_time_update()
     unix_time_value = (current_time_monotonic() / 1000ULL) + unix_base_time_value;
 }
 
-uint64_t unix_time()
+uint64_t unix_time(void)
 {
     return unix_time_value;
 }
@@ -87,7 +86,7 @@ void host_to_net(uint8_t *num, uint16_t numbytes)
 uint16_t lendian_to_host16(uint16_t lendian)
 {
 #ifdef WORDS_BIGENDIAN
-    return  (lendian << 8) | (lendian >> 8 );
+    return (lendian << 8) | (lendian >> 8);
 #else
     return lendian;
 #endif
@@ -96,7 +95,7 @@ uint16_t lendian_to_host16(uint16_t lendian)
 void host_to_lendian32(uint8_t *dest,  uint32_t num)
 {
 #ifdef WORDS_BIGENDIAN
-    num = ((num << 8) & 0xFF00FF00 ) | ((num >> 8) & 0xFF00FF );
+    num = ((num << 8) & 0xFF00FF00) | ((num >> 8) & 0xFF00FF);
     num = (num << 16) | (num >> 16);
 #endif
     memcpy(dest, &num, sizeof(uint32_t));
@@ -107,7 +106,7 @@ void lendian_to_host32(uint32_t *dest, const uint8_t *lendian)
     uint32_t d;
     memcpy(&d, lendian, sizeof(uint32_t));
 #ifdef WORDS_BIGENDIAN
-    d = ((d << 8) & 0xFF00FF00 ) | ((d >> 8) & 0xFF00FF );
+    d = ((d << 8) & 0xFF00FF00) | ((d >> 8) & 0xFF00FF);
     d = (d << 16) | (d >> 16);
 #endif
     *dest = d;
@@ -169,7 +168,7 @@ int load_state(load_state_callback_func load_state_callback, void *outer,
     }
 
     return length == 0 ? 0 : -1;
-};
+}
 
 int create_recursive_mutex(pthread_mutex_t *mutex)
 {
@@ -193,94 +192,4 @@ int create_recursive_mutex(pthread_mutex_t *mutex)
     pthread_mutexattr_destroy(&attr);
 
     return 0;
-}
-
-
-struct RingBuffer {
-    uint16_t size; /* Max size */
-    uint16_t start;
-    uint16_t end;
-    void   **data;
-};
-
-bool rb_full(const RingBuffer *b)
-{
-    return (b->end + 1) % b->size == b->start;
-}
-bool rb_empty(const RingBuffer *b)
-{
-    return b->end == b->start;
-}
-void *rb_write(RingBuffer *b, void *p)
-{
-    void *rc = NULL;
-
-    if ((b->end + 1) % b->size == b->start) { /* full */
-        rc = b->data[b->start];
-    }
-
-    b->data[b->end] = p;
-    b->end = (b->end + 1) % b->size;
-
-    if (b->end == b->start) {
-        b->start = (b->start + 1) % b->size;
-    }
-
-    return rc;
-}
-bool rb_read(RingBuffer *b, void **p)
-{
-    if (b->end == b->start) { /* Empty */
-        *p = NULL;
-        return false;
-    }
-
-    *p = b->data[b->start];
-    b->start = (b->start + 1) % b->size;
-    return true;
-}
-RingBuffer *rb_new(int size)
-{
-    RingBuffer *buf = calloc(sizeof(RingBuffer), 1);
-
-    if (!buf) {
-        return NULL;
-    }
-
-    buf->size = size + 1; /* include empty elem */
-
-    if (!(buf->data = calloc(buf->size, sizeof(void *)))) {
-        free(buf);
-        return NULL;
-    }
-
-    return buf;
-}
-void rb_kill(RingBuffer *b)
-{
-    if (b) {
-        free(b->data);
-        free(b);
-    }
-}
-uint16_t rb_size(const RingBuffer *b)
-{
-    if (rb_empty(b)) {
-        return 0;
-    }
-
-    return
-        b->end > b->start ?
-        b->end - b->start :
-        (b->size - b->start) + b->end;
-}
-uint16_t rb_data(const RingBuffer *b, void **dest)
-{
-    uint16_t i = 0;
-
-    for (; i < rb_size(b); i++) {
-        dest[i] = b->data[(b->start + i) % b->size];
-    }
-
-    return i;
 }

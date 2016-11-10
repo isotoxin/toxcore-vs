@@ -93,81 +93,6 @@ typedef struct ToxAV ToxAV;
 
 /*******************************************************************************
  *
- * :: API version
- *
- ******************************************************************************/
-
-
-
-/**
- * The major version number. Incremented when the API or ABI changes in an
- * incompatible way.
- */
-#define TOXAV_VERSION_MAJOR               0u
-
-/**
- * The minor version number. Incremented when functionality is added without
- * breaking the API or ABI. Set to 0 when the major version number is
- * incremented.
- */
-#define TOXAV_VERSION_MINOR               0u
-
-/**
- * The patch or revision number. Incremented when bugfixes are applied without
- * changing any functionality or API or ABI.
- */
-#define TOXAV_VERSION_PATCH               0u
-
-/**
- * A macro to check at preprocessing time whether the client code is compatible
- * with the installed version of ToxAV.
- */
-#define TOXAV_VERSION_IS_API_COMPATIBLE(MAJOR, MINOR, PATCH)        \
-  (TOXAV_VERSION_MAJOR == MAJOR &&                                \
-   (TOXAV_VERSION_MINOR > MINOR ||                                \
-    (TOXAV_VERSION_MINOR == MINOR &&                              \
-     TOXAV_VERSION_PATCH >= PATCH)))
-
-/**
- * A macro to make compilation fail if the client code is not compatible with
- * the installed version of ToxAV.
- */
-#define TOXAV_VERSION_REQUIRE(MAJOR, MINOR, PATCH)                \
-  typedef char toxav_required_version[TOXAV_IS_COMPATIBLE(MAJOR, MINOR, PATCH) ? 1 : -1]
-
-/**
- * A convenience macro to call toxav_version_is_compatible with the currently
- * compiling API version.
- */
-#define TOXAV_VERSION_IS_ABI_COMPATIBLE()                         \
-  toxav_version_is_compatible(TOXAV_VERSION_MAJOR, TOXAV_VERSION_MINOR, TOXAV_VERSION_PATCH)
-
-/**
- * Return the major version number of the library. Can be used to display the
- * ToxAV library version or to check whether the client is compatible with the
- * dynamically linked version of ToxAV.
- */
-uint32_t toxav_version_major(void);
-
-/**
- * Return the minor version number of the library.
- */
-uint32_t toxav_version_minor(void);
-
-/**
- * Return the patch number of the library.
- */
-uint32_t toxav_version_patch(void);
-
-/**
- * Return whether the compiled library version is compatible with the passed
- * version numbers.
- */
-bool toxav_version_is_compatible(uint32_t major, uint32_t minor, uint32_t patch);
-
-
-/*******************************************************************************
- *
  * :: Creation and destruction
  *
  ******************************************************************************/
@@ -754,23 +679,24 @@ void toxav_callback_audio_receive_frame(ToxAV *av, toxav_audio_receive_frame_cb 
 /**
  * The function type for the video_receive_frame callback.
  *
+ * The size of plane data is derived from width and height as documented
+ * below.
+ *
+ * Strides represent padding for each plane that may or may not be present.
+ * You must handle strides in your image processing code. Strides are
+ * negative if the image is bottom-up hence why you MUST abs() it when
+ * calculating plane buffer size.
+ *
  * @param friend_number The friend number of the friend who sent a video frame.
  * @param width Width of the frame in pixels.
  * @param height Height of the frame in pixels.
- * @param y
- * @param u
- * @param v Plane data.
- *          The size of plane data is derived from width and height where
- *          Y = MAX(width, abs(ystride)) * height,
- *          U = MAX(width/2, abs(ustride)) * (height/2) and
- *          V = MAX(width/2, abs(vstride)) * (height/2).
- * @param ystride
- * @param ustride
- * @param vstride Strides data. Strides represent padding for each plane
- *                that may or may not be present. You must handle strides in
- *                your image processing code. Strides are negative if the
- *                image is bottom-up hence why you MUST abs() it when
- *                calculating plane buffer size.
+ * @param y Luminosity plane. Size = MAX(width, abs(ystride)) * height.
+ * @param u U chroma plane. Size = MAX(width/2, abs(ustride)) * (height/2).
+ * @param v V chroma plane. Size = MAX(width/2, abs(vstride)) * (height/2).
+ *
+ * @param ystride Luminosity plane stride.
+ * @param ustride U chroma plane stride.
+ * @param vstride V chroma plane stride.
  */
 typedef void toxav_video_receive_frame_cb(ToxAV *av, uint32_t friend_number, uint16_t width, uint16_t height,
         const uint8_t *y, const uint8_t *u, const uint8_t *v, int32_t ystride, int32_t ustride, int32_t vstride,
@@ -784,7 +710,7 @@ typedef void toxav_video_receive_frame_cb(ToxAV *av, uint32_t friend_number, uin
 void toxav_callback_video_receive_frame(ToxAV *av, toxav_video_receive_frame_cb *callback, void *user_data);
 
 /**
- * NOTE Compatibility with old toxav group calls TODO remove
+ * NOTE Compatibility with old toxav group calls. TODO(iphydf): remove
  */
 /* Create a new toxav group.
  *
@@ -802,7 +728,7 @@ int toxav_add_av_groupchat(Tox *tox, void (*audio_callback)(void *, int, int, co
 /* Join a AV group (you need to have been invited first.)
  *
  * returns group number on success
- * returns -1 on failure.
+ * returns < 0 on failure.
  *
  * Audio data callback format (same as the one for toxav_add_av_groupchat()):
  *   audio_callback(Tox *tox, int groupnumber, int peernumber, const int16_t *pcm, unsigned int samples, uint8_t channels, unsigned int sample_rate, void *userdata)

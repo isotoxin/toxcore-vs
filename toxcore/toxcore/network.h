@@ -43,7 +43,12 @@
 //Windows XP
 #define WINVER 0x0501
 #endif
+
+// The mingw32/64 Windows library warns about including winsock2.h after
+// windows.h even though with the above it's a valid thing to do. So, to make
+// mingw32 headers happy, we include winsock2.h first.
 #include <winsock2.h>
+
 #include <windows.h>
 #include <ws2tcpip.h>
 
@@ -97,33 +102,36 @@ typedef int sock_t;
 
 #define MAX_UDP_PACKET_SIZE 2048
 
-#define NET_PACKET_PING_REQUEST    0   /* Ping request packet ID. */
-#define NET_PACKET_PING_RESPONSE   1   /* Ping response packet ID. */
-#define NET_PACKET_GET_NODES       2   /* Get nodes request packet ID. */
-#define NET_PACKET_SEND_NODES_IPV6 4   /* Send nodes response packet ID for other addresses. */
-#define NET_PACKET_COOKIE_REQUEST  24  /* Cookie request packet */
-#define NET_PACKET_COOKIE_RESPONSE 25  /* Cookie response packet */
-#define NET_PACKET_CRYPTO_HS       26  /* Crypto handshake packet */
-#define NET_PACKET_CRYPTO_DATA     27  /* Crypto data packet */
-#define NET_PACKET_CRYPTO          32  /* Encrypted data packet ID. */
-#define NET_PACKET_LAN_DISCOVERY   33  /* LAN discovery packet ID. */
+typedef enum NET_PACKET_TYPE {
+    NET_PACKET_PING_REQUEST         = 0x00, /* Ping request packet ID. */
+    NET_PACKET_PING_RESPONSE        = 0x01, /* Ping response packet ID. */
+    NET_PACKET_GET_NODES            = 0x02, /* Get nodes request packet ID. */
+    NET_PACKET_SEND_NODES_IPV6      = 0x04, /* Send nodes response packet ID for other addresses. */
+    NET_PACKET_COOKIE_REQUEST       = 0x18, /* Cookie request packet */
+    NET_PACKET_COOKIE_RESPONSE      = 0x19, /* Cookie response packet */
+    NET_PACKET_CRYPTO_HS            = 0x1a, /* Crypto handshake packet */
+    NET_PACKET_CRYPTO_DATA          = 0x1b, /* Crypto data packet */
+    NET_PACKET_CRYPTO               = 0x20, /* Encrypted data packet ID. */
+    NET_PACKET_LAN_DISCOVERY        = 0x21, /* LAN discovery packet ID. */
 
-/* See:  docs/Prevent_Tracking.txt and onion.{c, h} */
-#define NET_PACKET_ONION_SEND_INITIAL 128
-#define NET_PACKET_ONION_SEND_1 129
-#define NET_PACKET_ONION_SEND_2 130
+    /* See: docs/Prevent_Tracking.txt and onion.{c,h} */
+    NET_PACKET_ONION_SEND_INITIAL   = 0x80,
+    NET_PACKET_ONION_SEND_1         = 0x81,
+    NET_PACKET_ONION_SEND_2         = 0x82,
 
-#define NET_PACKET_ANNOUNCE_REQUEST 131
-#define NET_PACKET_ANNOUNCE_RESPONSE 132
-#define NET_PACKET_ONION_DATA_REQUEST 133
-#define NET_PACKET_ONION_DATA_RESPONSE 134
+    NET_PACKET_ANNOUNCE_REQUEST     = 0x83,
+    NET_PACKET_ANNOUNCE_RESPONSE    = 0x84,
+    NET_PACKET_ONION_DATA_REQUEST   = 0x85,
+    NET_PACKET_ONION_DATA_RESPONSE  = 0x86,
 
-#define NET_PACKET_ONION_RECV_3 140
-#define NET_PACKET_ONION_RECV_2 141
-#define NET_PACKET_ONION_RECV_1 142
+    NET_PACKET_ONION_RECV_3         = 0x8c,
+    NET_PACKET_ONION_RECV_2         = 0x8d,
+    NET_PACKET_ONION_RECV_1         = 0x8e,
 
-/* Only used for bootstrap nodes */
-#define BOOTSTRAP_INFO_PACKET_ID 240
+    BOOTSTRAP_INFO_PACKET_ID        = 0xf0, /* Only used for bootstrap nodes */
+
+    NET_PACKET_MAX                  = 0xff, /* This type must remain within a single uint8. */
+} NET_PACKET_TYPE;
 
 
 #define TOX_PORTRANGE_FROM 33445

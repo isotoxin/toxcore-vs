@@ -23,28 +23,30 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
+#include "rtp.h"
+
+#include "bwcontroller.h"
+
 #include "../toxcore/Messenger.h"
 #include "../toxcore/logger.h"
 #include "../toxcore/util.h"
-#include "bwcontroller.h"
-#include "rtp.h"
 
 #include <assert.h>
 #include <stdlib.h>
 
 
-int handle_rtp_packet (Messenger *m, uint32_t friendnumber, const uint8_t *data, uint16_t length, void *object);
+int handle_rtp_packet(Messenger *m, uint32_t friendnumber, const uint8_t *data, uint16_t length, void *object);
 
 
-RTPSession *rtp_new (int payload_type, Messenger *m, uint32_t friendnumber,
-                     BWController *bwc, void *cs,
-                     int (*mcb) (void *, struct RTPMessage *))
+RTPSession *rtp_new(int payload_type, Messenger *m, uint32_t friendnumber,
+                    BWController *bwc, void *cs,
+                    int (*mcb)(void *, struct RTPMessage *))
 {
     assert(mcb);
     assert(cs);
     assert(m);
 
-    RTPSession *retu = calloc(1, sizeof(RTPSession));
+    RTPSession *retu = (RTPSession *)calloc(1, sizeof(RTPSession));
 
     if (!retu) {
         LOGGER_WARNING(m->log, "Alloc failed! Program might misbehave!");
@@ -71,7 +73,7 @@ RTPSession *rtp_new (int payload_type, Messenger *m, uint32_t friendnumber,
 
     return retu;
 }
-void rtp_kill (RTPSession *session)
+void rtp_kill(RTPSession *session)
 {
     if (!session) {
         return;
@@ -79,8 +81,8 @@ void rtp_kill (RTPSession *session)
 
     LOGGER_DEBUG(session->m->log, "Terminated RTP session: %p", session);
 
-    rtp_stop_receiving (session);
-    free (session);
+    rtp_stop_receiving(session);
+    free(session);
 }
 int rtp_allow_receiving(RTPSession *session)
 {
@@ -108,7 +110,7 @@ int rtp_stop_receiving(RTPSession *session)
     LOGGER_DEBUG(session->m->log, "Stopped receiving on session: %p", session);
     return 0;
 }
-int rtp_send_data (RTPSession *session, const uint8_t *data, uint16_t length)
+int rtp_send_data(RTPSession *session, const uint8_t *data, uint16_t length)
 {
     if (!session) {
         LOGGER_WARNING(session->m->log, "No session!");
@@ -191,7 +193,7 @@ int rtp_send_data (RTPSession *session, const uint8_t *data, uint16_t length)
 }
 
 
-bool chloss (const RTPSession *session, const struct RTPHeader *header)
+static bool chloss(const RTPSession *session, const struct RTPHeader *header)
 {
     if (ntohl(header->timestamp) < session->rtimestamp) {
         uint16_t hosq, lost = 0;
@@ -202,7 +204,7 @@ bool chloss (const RTPSession *session, const struct RTPHeader *header)
                (session->rsequnum + 65535) - hosq :
                session->rsequnum - hosq;
 
-        fprintf (stderr, "Lost packet\n");
+        fprintf(stderr, "Lost packet\n");
 
         while (lost --) {
             bwc_add_lost(session->bwc , 0);
@@ -213,11 +215,12 @@ bool chloss (const RTPSession *session, const struct RTPHeader *header)
 
     return false;
 }
-struct RTPMessage *new_message (size_t allocate_len, const uint8_t *data, uint16_t data_length)
+static struct RTPMessage *new_message(size_t allocate_len, const uint8_t *data, uint16_t data_length)
 {
     assert(allocate_len >= data_length);
 
-    struct RTPMessage *msg = calloc(sizeof(struct RTPMessage) + (allocate_len - sizeof(struct RTPHeader)), 1);
+    struct RTPMessage *msg = (struct RTPMessage *)calloc(sizeof(struct RTPMessage) + (allocate_len - sizeof(
+                                 struct RTPHeader)), 1);
 
     msg->len = data_length - sizeof(struct RTPHeader);
     memcpy(&msg->header, data, data_length);
@@ -231,22 +234,22 @@ struct RTPMessage *new_message (size_t allocate_len, const uint8_t *data, uint16
 
     return msg;
 }
-int handle_rtp_packet (Messenger *m, uint32_t friendnumber, const uint8_t *data, uint16_t length, void *object)
+int handle_rtp_packet(Messenger *m, uint32_t friendnumber, const uint8_t *data, uint16_t length, void *object)
 {
     (void) m;
     (void) friendnumber;
 
-    RTPSession *session = object;
+    RTPSession *session = (RTPSession *)object;
 
     data ++;
     length--;
 
-    if (!session || length < sizeof (struct RTPHeader)) {
+    if (!session || length < sizeof(struct RTPHeader)) {
         LOGGER_WARNING(m->log, "No session or invalid length of received buffer!");
         return -1;
     }
 
-    const struct RTPHeader *header = (struct RTPHeader *) data;
+    const struct RTPHeader *header = (const struct RTPHeader *) data;
 
     if (header->pt != session->payload_type % 128) {
         LOGGER_WARNING(m->log, "Invalid payload type with the session");
@@ -260,7 +263,7 @@ int handle_rtp_packet (Messenger *m, uint32_t friendnumber, const uint8_t *data,
 
     bwc_feed_avg(session->bwc, length);
 
-    if (ntohs(header->tlen) == length - sizeof (struct RTPHeader)) {
+    if (ntohs(header->tlen) == length - sizeof(struct RTPHeader)) {
         /* The message is sent in single part */
 
         /* Only allow messages which have arrived in order;
@@ -279,7 +282,7 @@ int handle_rtp_packet (Messenger *m, uint32_t friendnumber, const uint8_t *data,
         /* Invoke processing of active multiparted message */
         if (session->mp) {
             if (session->mcb) {
-                session->mcb (session->cs, session->mp);
+                session->mcb(session->cs, session->mp);
             } else {
                 free(session->mp);
             }
@@ -295,7 +298,7 @@ int handle_rtp_packet (Messenger *m, uint32_t friendnumber, const uint8_t *data,
             return 0;
         }
 
-        return session->mcb (session->cs, new_message(length, data, length));
+        return session->mcb(session->cs, new_message(length, data, length));
     }
 
     /* The message is sent in multiple parts */
@@ -334,7 +337,7 @@ int handle_rtp_packet (Messenger *m, uint32_t friendnumber, const uint8_t *data,
                  * processing.
                  */
                 if (session->mcb) {
-                    session->mcb (session->cs, session->mp);
+                    session->mcb(session->cs, session->mp);
                 } else {
                     free(session->mp);
                 }
@@ -357,11 +360,11 @@ int handle_rtp_packet (Messenger *m, uint32_t friendnumber, const uint8_t *data,
 
                          /* Must account sizes of rtp headers too */
                          ((session->mp->header.tlen - session->mp->len) /
-                          MAX_CRYPTO_DATA_SIZE) * sizeof(struct RTPHeader) );
+                          MAX_CRYPTO_DATA_SIZE) * sizeof(struct RTPHeader));
 
             /* Push the previous message for processing */
             if (session->mcb) {
-                session->mcb (session->cs, session->mp);
+                session->mcb(session->cs, session->mp);
             } else {
                 free(session->mp);
             }

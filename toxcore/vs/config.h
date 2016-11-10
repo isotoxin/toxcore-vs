@@ -5,10 +5,13 @@
 
 #define _INC_ERRNO
 
+#define DHT_HARDENING 1
+
 typedef int ssize_t;
 
 #if _MSC_VER <= 1800
 #define snprintf _snprintf
+#define __func__ __FUNCTION__
 #endif
 
 #define DYNAMIC( eltype, arrname, arrsize ) size_t sizeof_##arrname = sizeof(eltype) * (arrsize); eltype * arrname = _alloca( sizeof_##arrname )

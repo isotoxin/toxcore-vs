@@ -22,9 +22,11 @@
 #ifndef RTP_H
 #define RTP_H
 
-#include "../toxcore/Messenger.h"
 #include "bwcontroller.h"
-#include "stdbool.h"
+
+#include "../toxcore/Messenger.h"
+
+#include <stdbool.h>
 
 /**
  * Payload type identifier. Also used as rtp callback prefix.
@@ -95,16 +97,16 @@ typedef struct {
 
     BWController *bwc;
     void *cs;
-    int (*mcb) (void *, struct RTPMessage *msg);
+    int (*mcb)(void *, struct RTPMessage *msg);
 } RTPSession;
 
 
-RTPSession *rtp_new (int payload_type, Messenger *m, uint32_t friendnumber,
-                     BWController *bwc, void *cs,
-                     int (*mcb) (void *, struct RTPMessage *));
-void rtp_kill (RTPSession *session);
-int rtp_allow_receiving (RTPSession *session);
-int rtp_stop_receiving (RTPSession *session);
-int rtp_send_data (RTPSession *session, const uint8_t *data, uint16_t length);
+RTPSession *rtp_new(int payload_type, Messenger *m, uint32_t friendnumber,
+                    BWController *bwc, void *cs,
+                    int (*mcb)(void *, struct RTPMessage *));
+void rtp_kill(RTPSession *session);
+int rtp_allow_receiving(RTPSession *session);
+int rtp_stop_receiving(RTPSession *session);
+int rtp_send_data(RTPSession *session, const uint8_t *data, uint16_t length);
 
 #endif /* RTP_H */

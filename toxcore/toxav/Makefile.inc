@@ -8,14 +8,16 @@ libtoxav_la_SOURCES = ../toxav/rtp.h \
                     ../toxav/rtp.c \
                     ../toxav/msi.h \
                     ../toxav/msi.c \
-                    ../toxav/group.h \
-                    ../toxav/group.c \
+                    ../toxav/groupav.h \
+                    ../toxav/groupav.c \
                     ../toxav/audio.h \
                     ../toxav/audio.c \
                     ../toxav/video.h \
                     ../toxav/video.c \
                     ../toxav/bwcontroller.h \
                     ../toxav/bwcontroller.c \
+                    ../toxav/ring_buffer.h \
+                    ../toxav/ring_buffer.c \
                     ../toxav/toxav.h \
                     ../toxav/toxav.c \
                     ../toxav/toxav_old.c
