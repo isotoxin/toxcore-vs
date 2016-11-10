@@ -6,7 +6,7 @@ All necessary libs to build static toxcore using Visual Studio 2013/2015
 
 Current version of toxcore is toktok based, but has some advatages.
 
-Main advantage is *PERSISTEN GROUPCHATS* compatible with current groupchats.
+Main advantage is *PERSISTENT GROUPCHATS* compatible with current groupchats.
 
 `Tox_Options` has addition `const char *` parameter:<br>
 `const char * client_capabilities`<br>
