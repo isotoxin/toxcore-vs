@@ -44,79 +44,97 @@
 
 #define crypto_box_KEYBYTES (crypto_box_BEFORENMBYTES)
 
-/* compare 2 public keys of length crypto_box_PUBLICKEYBYTES, not vulnerable to timing attacks.
-   returns 0 if both mem locations of length are equal,
-   return -1 if they are not. */
-int public_key_cmp(const uint8_t *pk1, const uint8_t *pk2);
+/**
+ * compare 2 public keys of length crypto_box_PUBLICKEYBYTES, not vulnerable to timing attacks.
+ * returns 0 if both mem locations of length are equal,
+ * return -1 if they are not.
+ */
+int32_t public_key_cmp(const uint8_t *pk1, const uint8_t *pk2);
 
-/*  return a random number.
- *
- * random_int for a 32bin int.
- * random_64b for a 64bit int.
+/**
+ * Return a random 32 bit integer.
  */
 uint32_t random_int(void);
+
+/**
+ * Return a random 64 bit integer.
+ */
 uint64_t random_64b(void);
 
-/* Check if a Tox public key crypto_box_PUBLICKEYBYTES is valid or not.
+/**
+ * Check if a Tox public key crypto_box_PUBLICKEYBYTES is valid or not.
  * This should only be used for input validation.
  *
  * return 0 if it isn't.
  * return 1 if it is.
  */
-int public_key_valid(const uint8_t *public_key);
+int32_t public_key_valid(const uint8_t *public_key);
 
-/* Encrypts plain of length length to encrypted of length + 16 using the
+/**
+ * Encrypts plain of length length to encrypted of length + 16 using the
  * public key(32 bytes) of the receiver and the secret key of the sender and a 24 byte nonce.
  *
  *  return -1 if there was a problem.
  *  return length of encrypted data if everything was fine.
  */
-int encrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uint8_t *nonce,
-                 const uint8_t *plain, uint32_t length, uint8_t *encrypted);
+int32_t encrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *plain,
+                     uint32_t length, uint8_t *encrypted);
 
-
-/* Decrypts encrypted of length length to plain of length length - 16 using the
+/**
+ * Decrypts encrypted of length length to plain of length length - 16 using the
  * public key(32 bytes) of the sender, the secret key of the receiver and a 24 byte nonce.
  *
  *  return -1 if there was a problem (decryption failed).
  *  return length of plain data if everything was fine.
  */
-int decrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uint8_t *nonce,
-                 const uint8_t *encrypted, uint32_t length, uint8_t *plain);
+int32_t decrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uint8_t *nonce,
+                     const uint8_t *encrypted, uint32_t length, uint8_t *plain);
 
-/* Fast encrypt/decrypt operations. Use if this is not a one-time communication.
-   encrypt_precompute does the shared-key generation once so it does not have
-   to be preformed on every encrypt/decrypt. */
-int encrypt_precompute(const uint8_t *public_key, const uint8_t *secret_key, uint8_t *enc_key);
+/**
+ * Fast encrypt/decrypt operations. Use if this is not a one-time communication.
+ * encrypt_precompute does the shared-key generation once so it does not have
+ * to be preformed on every encrypt/decrypt.
+ */
+int32_t encrypt_precompute(const uint8_t *public_key, const uint8_t *secret_key, uint8_t *enc_key);
 
-/* Encrypts plain of length length to encrypted of length + 16 using a
+/**
+ * Encrypts plain of length length to encrypted of length + 16 using a
  * secret key crypto_box_KEYBYTES big and a 24 byte nonce.
  *
  *  return -1 if there was a problem.
  *  return length of encrypted data if everything was fine.
  */
-int encrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *plain, uint32_t length,
-                           uint8_t *encrypted);
+int32_t encrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *plain, uint32_t length,
+                               uint8_t *encrypted);
 
-/* Decrypts encrypted of length length to plain of length length - 16 using a
+/**
+ * Decrypts encrypted of length length to plain of length length - 16 using a
  * secret key crypto_box_KEYBYTES big and a 24 byte nonce.
  *
  *  return -1 if there was a problem (decryption failed).
  *  return length of plain data if everything was fine.
  */
-int decrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *encrypted, uint32_t length,
-                           uint8_t *plain);
+int32_t decrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *encrypted,
+                               uint32_t length, uint8_t *plain);
 
-/* Increment the given nonce by 1. */
+/**
+ * Increment the given nonce by 1.
+ */
 void increment_nonce(uint8_t *nonce);
 
-/* increment the given nonce by num */
+/**
+ * Increment the given nonce by num.
+ */
 void increment_nonce_number(uint8_t *nonce, uint32_t host_order_num);
 
-/* Fill the given nonce with random bytes. */
+/**
+ * Fill the given nonce with random bytes.
+ */
 void random_nonce(uint8_t *nonce);
 
-/* Fill a key crypto_box_KEYBYTES big with random bytes */
+/**
+ * Fill a key crypto_box_KEYBYTES big with random bytes.
+ */
 void new_symmetric_key(uint8_t *key);
 
 #endif

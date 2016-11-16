@@ -180,7 +180,7 @@ uint32_t tox_version_minor(void);
  * The patch or revision number. Incremented when bugfixes are applied without
  * changing any functionality or API or ABI.
  */
-#define TOX_VERSION_PATCH              3
+#define TOX_VERSION_PATCH              4
 
 uint32_t tox_version_patch(void);
 
@@ -246,9 +246,11 @@ uint32_t tox_public_key_size(void);
 uint32_t tox_secret_key_size(void);
 
 /**
-* The size of a Tox Conference unique id in bytes.
-*/
-#define TOX_CONFERENCE_UID_SIZE            32
+ * The size of a Tox Conference unique id in bytes.
+ */
+#define TOX_CONFERENCE_UID_SIZE        32
+
+uint32_t tox_conference_uid_size(void);
 
 /**
  * The size of a Tox address in bytes. Tox addresses are in the format
@@ -1003,14 +1005,17 @@ void tox_iterate(Tox *tox, void *user_data);
 void tox_self_get_address(const Tox *tox, uint8_t *address);
 
 /**
- * Set the 4-byte nospam part of the address.
+ * Set the 4-byte nospam part of the address. This value is expected in host
+ * byte order. I.e. 0x12345678 will form the bytes [12, 34, 56, 78] in the
+ * nospam part of the Tox friend address.
  *
  * @param nospam Any 32 bit unsigned integer.
  */
 void tox_self_set_nospam(Tox *tox, uint32_t nospam);
 
 /**
- * Get the 4-byte nospam part of the address.
+ * Get the 4-byte nospam part of the address. This value is returned in host
+ * byte order.
  */
 uint32_t tox_self_get_nospam(const Tox *tox);
 
@@ -2400,11 +2405,6 @@ typedef enum TOX_CONFERENCE_STATE_CHANGE {
     TOX_CONFERENCE_STATE_CHANGE_LIST_CHANGED,
 
     /**
-     * Deprecated. Never occurred.
-     */
-    TOX_CONFERENCE_STATE_CHANGE_PEER_EXIT,
-
-    /**
      * A peer has changed their name.
      */
     TOX_CONFERENCE_STATE_CHANGE_PEER_NAME_CHANGE,
@@ -2479,8 +2479,8 @@ bool tox_conference_delete(Tox *tox, uint32_t conference_number, TOX_ERR_CONFERE
 typedef enum TOX_ERR_CONFERENCE_ENTER {
 
     /**
-    * The function returned successfully.
-    */
+     * The function returned successfully.
+     */
     TOX_ERR_CONFERENCE_ENTER_OK,
 
     /**
@@ -2489,8 +2489,8 @@ typedef enum TOX_ERR_CONFERENCE_ENTER {
     TOX_ERR_CONFERENCE_ENTER_ALREADY,
 
     /**
-    * The conference number passed did not designate a valid conference.
-    */
+     * The conference number passed did not designate a valid conference.
+     */
     TOX_ERR_CONFERENCE_ENTER_NOT_FOUND,
 
 } TOX_ERR_CONFERENCE_ENTER;
@@ -2502,27 +2502,27 @@ typedef enum TOX_ERR_CONFERENCE_ENTER {
  * @param conference_number The conference number of the conference to be entered.
  * conference_number can be obtained by tox_conference_by_uid
  * Call this function only if you leave conference using tox_conference_leave.
-*  No need to call this function for just created conferences
+ * No need to call this function for just created conferences
  *
  * @return true on success.
  */
-bool tox_conference_enter( Tox *tox, uint32_t conference_number, TOX_ERR_CONFERENCE_ENTER *error );
+bool tox_conference_enter(Tox *tox, uint32_t conference_number, TOX_ERR_CONFERENCE_ENTER *error);
 
 typedef enum TOX_ERR_CONFERENCE_LEAVE {
 
     /**
-    * The function returned successfully.
-    */
+     * The function returned successfully.
+     */
     TOX_ERR_CONFERENCE_LEAVE_OK,
 
     /**
-    * Conference already disconnected
-    */
+     * Conference already disconnected
+     */
     TOX_ERR_CONFERENCE_LEAVE_ALREADY,
 
     /**
-    * The conference number passed did not designate a valid conference.
-    */
+     * The conference number passed did not designate a valid conference.
+     */
     TOX_ERR_CONFERENCE_LEAVE_NOT_FOUND,
 
 } TOX_ERR_CONFERENCE_LEAVE;
@@ -2543,7 +2543,7 @@ typedef enum TOX_ERR_CONFERENCE_LEAVE {
  *
  * @return true on success.
  */
-bool tox_conference_leave( Tox *tox, uint32_t conference_number, bool keep_leave, TOX_ERR_CONFERENCE_LEAVE *error );
+bool tox_conference_leave(Tox *tox, uint32_t conference_number, bool keep_leave, TOX_ERR_CONFERENCE_LEAVE *error);
 
 /**
  * Error codes for peer info queries.
@@ -2836,42 +2836,42 @@ TOX_CONFERENCE_TYPE tox_conference_get_type(const Tox *tox, uint32_t conference_
         TOX_ERR_CONFERENCE_GET_TYPE *error);
 
 /**
-* Get the conference unique ID.
-*
-* @param uid A memory region large enough to store TOX_CONFERENCE_UID_SIZE bytes
-*
-* @return true on success.
-*/
-bool tox_conference_get_uid( const Tox *tox, uint32_t conference_number, uint8_t *uid );
-
+ * Get the conference unique ID.
+ *
+ * @param uid A memory region large enough to store TOX_CONFERENCE_UID_SIZE bytes
+ *
+ * @return true on success.
+ */
+bool tox_conference_get_uid(Tox *tox, uint32_t conference_number, uint8_t *uid);
 
 typedef enum TOX_ERR_CONFERENCE_BY_UID {
 
     /**
-    * The function returned successfully.
-    */
+     * The function returned successfully.
+     */
     TOX_ERR_CONFERENCE_BY_UID_OK,
 
     /**
-    * One of the arguments to the function was NULL when it was not expected.
-    */
+     * One of the arguments to the function was NULL when it was not expected.
+     */
     TOX_ERR_CONFERENCE_BY_UID_NULL,
 
     /**
-    * No conference with the given uid exists on the conference list.
-    */
+     * No conference with the given uid exists on the conference list.
+     */
     TOX_ERR_CONFERENCE_BY_UID_NOT_FOUND,
 
 } TOX_ERR_CONFERENCE_BY_UID;
 
 
 /**
-* Return the conference number associated with that uid.
-*
-* @return the conference number on success, UINT32_MAX on failure.
-* @param uid A byte array containing the conference id (TOX_CONFERENCE_UID_SIZE).
-*/
-uint32_t tox_conference_by_uid( const Tox *tox, const uint8_t *uid, TOX_ERR_CONFERENCE_BY_UID *error );
+ * Return the conference number associated with that uid.
+ *
+ * @return the conference number on success, UINT32_MAX on failure.
+ * @param uid A byte array containing the conference id (TOX_CONFERENCE_UID_SIZE).
+ */
+uint32_t tox_conference_by_uid(const Tox *tox, const uint8_t *uid, TOX_ERR_CONFERENCE_BY_UID *error);
+
 
 /*******************************************************************************
  *

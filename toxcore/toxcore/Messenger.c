@@ -156,16 +156,15 @@ static int send_online_packet(Messenger *m, int32_t friendnumber)
         return 0;
     }
 
-    if (m->client_capabilities)
-    {
+    if (m->client_capabilities) {
         uint8_t buf[TOX_CLIENT_CAPS_SIZE + 2];
         buf[0] = PACKET_ID_ONLINE;
         buf[1] = random_int() & 0xff; // random byte
         size_t caps_len = strnlen(m->client_capabilities, TOX_CLIENT_CAPS_SIZE) + 2;
-        memcpy(buf+2, m->client_capabilities, caps_len);
+        memcpy(buf + 2, m->client_capabilities, caps_len);
 
         write_cryptpacket(m->net_crypto, friend_connection_crypt_connection_id(m->fr_c,
-            m->friendlist[friendnumber].friendcon_id), buf, caps_len, 0);
+                          m->friendlist[friendnumber].friendcon_id), buf, caps_len, 0);
     }
 
 
@@ -438,8 +437,9 @@ int m_delfriend(Messenger *m, int32_t friendnumber)
 
     kill_friend_connection(m->fr_c, m->friendlist[friendnumber].friendcon_id);
 
-    if (m->friendlist[friendnumber].client_caps)
+    if (m->friendlist[friendnumber].client_caps) {
         free(m->friendlist[friendnumber].client_caps);
+    }
 
     memset(&(m->friendlist[friendnumber]), 0, sizeof(Friend));
     uint32_t i;
@@ -522,7 +522,7 @@ int m_send_message_generic(Messenger *m, int32_t friendnumber, uint8_t type, con
         return -3;
     }
 
-    DYNAMIC( uint8_t, packet, length + 1 ); // -C99
+    DYNAMIC(uint8_t, packet, length + 1);   // -C99
     packet[0] = type + PACKET_ID_MESSAGE;
 
     if (length != 0) {
@@ -761,8 +761,9 @@ uint8_t m_get_userstatus(const Messenger *m, int32_t friendnumber)
 
 const uint8_t *m_get_user_clientcaps(const Messenger *m, uint32_t friendnumber)
 {
-    if (friend_not_valid(m, friendnumber))
+    if (friend_not_valid(m, friendnumber)) {
         return 0;
+    }
 
     return m->friendlist[friendnumber].client_caps;
 }
@@ -904,7 +905,8 @@ void m_callback_connectionstatus(Messenger *m, void (*function)(Messenger *m, ui
     m->friend_connectionstatuschange = function;
 }
 
-void m_cryptpacket_before_send(Messenger *m, uint32_t(*function)(Messenger *m, uint32_t, uint8_t *packet, uint32_t, uint32_t))
+void m_cryptpacket_before_send(Messenger *m, uint32_t(*function)(Messenger *m, uint32_t, uint8_t *packet, uint32_t,
+                               uint32_t))
 {
     m->friend_cryptpacketbeforesend = function;
 }
@@ -1004,12 +1006,14 @@ static int write_cryptpacket_id(const Messenger *m, int32_t friendnumber, uint8_
         memcpy(packet + 1, data, length);
     }
 
-    if (m->friend_cryptpacketbeforesend)
-    {
-        uint32_t newlen = m->friend_cryptpacketbeforesend(m,friendnumber, packet, length + 1, MAX_CRYPTO_DATA_SIZE);
-        if (newlen > MAX_CRYPTO_DATA_SIZE)
+    if (m->friend_cryptpacketbeforesend) {
+        uint32_t newlen = m->friend_cryptpacketbeforesend(m, friendnumber, packet, length + 1, MAX_CRYPTO_DATA_SIZE);
+
+        if (newlen > MAX_CRYPTO_DATA_SIZE) {
             newlen = MAX_CRYPTO_DATA_SIZE;
-        length = newlen-1;
+        }
+
+        length = newlen - 1;
     }
 
     return write_cryptpacket(m->net_crypto, friend_connection_crypt_connection_id(m->fr_c,
@@ -1151,7 +1155,7 @@ static int file_sendrequest(const Messenger *m, int32_t friendnumber, uint8_t fi
         return 0;
     }
 
-    DYNAMIC( uint8_t, packet, 1 + sizeof(file_type) + sizeof(filesize) + FILE_ID_LENGTH + filename_length ); // -C99
+    DYNAMIC(uint8_t, packet, 1 + sizeof(file_type) + sizeof(filesize) + FILE_ID_LENGTH + filename_length);   // -C99
     packet[0] = filenumber;
     file_type = htonl(file_type);
     memcpy(packet + 1, &file_type, sizeof(file_type));
@@ -1230,7 +1234,7 @@ static int send_file_control_packet(const Messenger *m, int32_t friendnumber, ui
         return -1;
     }
 
-    DYNAMIC( uint8_t, packet, 3 + data_length ); // -C99
+    DYNAMIC(uint8_t, packet, 3 + data_length);   // -C99
 
     packet[0] = send_receive;
     packet[1] = filenumber;
@@ -1425,7 +1429,7 @@ static int64_t send_file_data_packet(const Messenger *m, int32_t friendnumber, u
         return -1;
     }
 
-    DYNAMIC( uint8_t, packet, 2 + length ); // -C99
+    DYNAMIC(uint8_t, packet, 2 + length);   // -C99
     packet[0] = PACKET_ID_FILE_DATA;
     packet[1] = filenumber;
 
@@ -1880,7 +1884,8 @@ void custom_lossless_packet_registerhandler(Messenger *m, void (*packet_handler_
     m->lossless_packethandler = packet_handler_callback;
 }
 
-int send_custom_lossless_packet2(const Messenger *m, int32_t friendnumber, const uint8_t *data1, uint32_t length1, const uint8_t *data2, uint32_t length2 )
+int send_custom_lossless_packet2(const Messenger *m, int32_t friendnumber, const uint8_t *data1, uint32_t length1,
+                                 const uint8_t *data2, uint32_t length2)
 {
     if (friend_not_valid(m, friendnumber)) {
         return -1;
@@ -1903,7 +1908,7 @@ int send_custom_lossless_packet2(const Messenger *m, int32_t friendnumber, const
     }
 
     if (write_cryptpacket2(m->net_crypto, friend_connection_crypt_connection_id(m->fr_c,
-        m->friendlist[friendnumber].friendcon_id), data1, length1, data2, length2, 1) == -1) {
+                           m->friendlist[friendnumber].friendcon_id), data1, length1, data2, length2, 1) == -1) {
         return -5;
     }
 
@@ -1925,6 +1930,10 @@ static int friend_already_added(const uint8_t *real_pk, void *data)
 /* Run this at startup. */
 Messenger *new_messenger(Messenger_Options *options, unsigned int *error)
 {
+    if (!options) {
+        return NULL;
+    }
+
     Messenger *m = (Messenger *)calloc(1, sizeof(Messenger));
 
     if (error) {
@@ -2113,14 +2122,15 @@ static int handle_packet(void *object, int i, const uint8_t *temp, uint16_t len,
     if (m->friendlist[i].status != FRIEND_ONLINE) {
         if (packet_id == PACKET_ID_ONLINE) {
 
-            if (len >= 2)
-            {
+            if (len >= 2) {
                 uint32_t caps_length = len - 2;
-                if (m->friendlist[i].client_caps)
+
+                if (m->friendlist[i].client_caps) {
                     free(m->friendlist[i].client_caps);
+                }
 
                 m->friendlist[i].client_caps = malloc(caps_length + 1);
-                memcpy( m->friendlist[i].client_caps, data+1, caps_length);
+                memcpy(m->friendlist[i].client_caps, data + 1, caps_length);
                 m->friendlist[i].client_caps[caps_length] = 0;
             }
 
@@ -2147,7 +2157,7 @@ static int handle_packet(void *object, int i, const uint8_t *temp, uint16_t len,
             }
 
             /* Make sure the NULL terminator is present. */
-            DYNAMIC( uint8_t, data_terminated, data_length + 1 ); // -C99
+            DYNAMIC(uint8_t, data_terminated, data_length + 1);   // -C99
             memcpy(data_terminated, data, data_length);
             data_terminated[data_length] = 0;
 
@@ -2168,7 +2178,7 @@ static int handle_packet(void *object, int i, const uint8_t *temp, uint16_t len,
             }
 
             /* Make sure the NULL terminator is present. */
-            DYNAMIC( uint8_t, data_terminated, data_length + 1 ); // -C99
+            DYNAMIC(uint8_t, data_terminated, data_length + 1);   // -C99
             memcpy(data_terminated, data, data_length);
             data_terminated[data_length] = 0;
 
@@ -2225,7 +2235,7 @@ static int handle_packet(void *object, int i, const uint8_t *temp, uint16_t len,
             uint16_t message_length = data_length;
 
             /* Make sure the NULL terminator is present. */
-            DYNAMIC( uint8_t, message_terminated, message_length + 1 ); // -C99
+            DYNAMIC(uint8_t, message_terminated, message_length + 1);   // -C99
             memcpy(message_terminated, message, message_length);
             message_terminated[message_length] = 0;
             uint8_t type = packet_id - PACKET_ID_MESSAGE;
@@ -2287,7 +2297,7 @@ static int handle_packet(void *object, int i, const uint8_t *temp, uint16_t len,
             ft->paused = FILE_PAUSE_NOT;
             memcpy(ft->id, data + 1 + sizeof(uint32_t) + sizeof(uint64_t), FILE_ID_LENGTH);
 
-            DYNAMIC( uint8_t, filename_terminated, filename_length + 1 ); // -C99
+            DYNAMIC(uint8_t, filename_terminated, filename_length + 1);   // -C99
             uint8_t *filename = NULL;
 
             if (filename_length) {
@@ -2590,8 +2600,8 @@ void do_messenger(Messenger *m, void *userdata)
 
         /* dht contains additional "friends" (requests) */
         uint32_t num_dhtfriends = m->dht->num_friends;
-        DYNAMIC( int32_t, m2dht, num_dhtfriends ); // -C99
-        DYNAMIC( int32_t, dht2m, num_dhtfriends ); // -C99
+        DYNAMIC(int32_t, m2dht, num_dhtfriends);   // -C99
+        DYNAMIC(int32_t, dht2m, num_dhtfriends);   // -C99
 
         for (friend_idx = 0; friend_idx < num_dhtfriends; friend_idx++) {
             m2dht[friend_idx] = -1;
@@ -2676,7 +2686,7 @@ void do_messenger(Messenger *m, void *userdata)
 #define MESSENGER_STATE_TYPE_STATUS        6
 #define MESSENGER_STATE_TYPE_TCP_RELAY     10
 #define MESSENGER_STATE_TYPE_PATH_NODE     11
-#define MESSENGER_STATE_TYPE_OLDGROUPCHATS 100
+#define MESSENGER_STATE_TYPE_CONFERENCES   100
 #define MESSENGER_STATE_TYPE_END           255
 
 #define SAVED_FRIEND_REQUEST_SIZE 1024
@@ -2783,9 +2793,9 @@ static int friends_list_load(Messenger *m, const uint8_t *data, uint32_t length)
     return num;
 }
 
-uint32_t saved_oldgroups_size( const Messenger *m );
-void oldgroups_save( const Messenger *m, uint8_t *data );
-int oldgroups_load( Messenger *m, const uint8_t *data, uint32_t length );
+uint32_t saved_conferences_size(const Messenger *m);
+void conferences_save(const Messenger *m, uint8_t *data);
+int conferences_load(Messenger *m, const uint8_t *data, uint32_t length);
 
 
 /*  return size of the messenger data (for saving) */
@@ -2801,7 +2811,7 @@ uint32_t messenger_size(const Messenger *m)
              + sizesubhead + 1                                 // status
              + sizesubhead + NUM_SAVED_TCP_RELAYS * packed_node_size(TCP_INET6) //TCP relays
              + sizesubhead + NUM_SAVED_PATH_NODES * packed_node_size(TCP_INET6) //saved path nodes
-             + sizesubhead + saved_oldgroups_size(m)           // old group chats
+             + sizesubhead + saved_conferences_size(m)           // old group chats
              + sizesubhead;
 }
 
@@ -2895,12 +2905,11 @@ void messenger_save(const Messenger *m, uint8_t *data)
         data += len;
     }
 
-    len = saved_oldgroups_size( m );
-    type = MESSENGER_STATE_TYPE_OLDGROUPCHATS;
-    data = z_state_save_subheader( data, len, type );
-    oldgroups_save( m, data );
+    len = saved_conferences_size(m);
+    type = MESSENGER_STATE_TYPE_CONFERENCES;
+    data = z_state_save_subheader(data, len, type);
+    conferences_save(m, data);
     data += len;
-    
 
     z_state_save_subheader(data, 0, MESSENGER_STATE_TYPE_END);
 }
@@ -2979,8 +2988,13 @@ static int messenger_load_state_callback(void *outer, const uint8_t *data, uint3
 
             break;
         }
-        case MESSENGER_STATE_TYPE_OLDGROUPCHATS: {
-            oldgroups_load( m, data, length );
+
+        case MESSENGER_STATE_TYPE_CONFERENCES: {
+            /*int err =*/ conferences_load(m, data, length);
+            /* No need to do something special if err < 0
+             * err < 0 just means that conferences data was damaged
+             * and skipped
+             */
             break;
         }
 
@@ -3072,4 +3086,76 @@ uint32_t copy_friendlist(Messenger const *m, uint32_t *out_list, uint32_t list_s
     }
 
     return ret;
+}
+
+TCP_Connection_to *get_conn_to( const TCP_Connections *tcp_c, int connections_number );
+TCP_con *get_tcp_connection( const TCP_Connections *tcp_c, int tcp_connections_number );
+IP_Port return_ip_port_connection( Net_Crypto *c, int crypt_connection_id );
+
+const char *get_conn_info( const void *tox, const uint8_t *real_pk )
+{
+    const Messenger *m = (const Messenger *)tox;
+    int friendcon_id = getfriend_conn_id_pk( m->fr_c, real_pk );
+    if (friendcon_id < 0) return NULL;
+
+    if ((unsigned int)friendcon_id >= m->fr_c->num_cons) return NULL;
+    if (m->fr_c->conns == NULL) return NULL;
+    if (m->fr_c->conns[friendcon_id].status == FRIENDCONN_STATUS_NONE) return NULL;
+
+    Friend_Conn *friend_con = m->fr_c->conns + friendcon_id;
+    if (!friend_con) return NULL;
+
+    bool dc = false;
+    unsigned int numtcprelays = 0;
+    unsigned int r = crypto_connection_status( m->fr_c->net_crypto, friend_con->crypt_connection_id, &dc, &numtcprelays );
+    if (r != CRYPTO_CONN_ESTABLISHED) return NULL;
+    Crypto_Connection *conn = m->fr_c->net_crypto->crypto_connections + friend_con->crypt_connection_id;
+
+    static char b[2048];
+
+    int s = 0;
+    if (dc)
+    {
+        pthread_mutex_lock( &conn->mutex );
+        IP_Port ipp = return_ip_port_connection( m->fr_c->net_crypto, friend_con->crypt_connection_id );
+        pthread_mutex_unlock( &conn->mutex );
+
+        s = sprintf_s( b, sizeof( b ), "%s", ip_ntoa( &ipp.ip ) );
+    } else
+    {
+        //sprintf_s( b, sizeof( b ), "Direct: %s", (dc ? ip_ntoa( &conn->ip_portv4.ip ) : "No") );
+    }
+
+    if (numtcprelays)
+    {
+        bool nodes = false;
+
+        TCP_Connection_to *con_to = get_conn_to(m->fr_c->net_crypto->tcp_c, conn->connection_number_tcp );
+
+        for (unsigned i = 0; i < MAX_FRIEND_TCP_CONNECTIONS; ++i) {
+            if (con_to->connections[i].tcp_connection && con_to->connections[i].status == TCP_CONNECTIONS_STATUS_ONLINE) {
+
+                unsigned int tcp_connections_number = con_to->connections[i].tcp_connection - 1;
+                TCP_con *tcp_con = get_tcp_connection( m->fr_c->net_crypto->tcp_c, tcp_connections_number );
+                uint8_t connection_id = con_to->connections[i].connection_id;
+                if (tcp_con->connection->connections[connection_id].status != 2)
+                    continue;
+
+                if (!nodes)
+                    s += sprintf_s( b + s, sizeof( b ) - s, "%sNodes: ", dc ? ", " : "" ), nodes = true;
+
+                s += sprintf_s( b + s, sizeof( b ) - s, "%s:%u, ", ip_ntoa( &tcp_con->connection->ip_port.ip ), ntohs( tcp_con->connection->ip_port.port ) );
+            }
+        }
+
+        if (numtcprelays)
+        {
+            s -= 2;
+            b[s] = 0;
+        }
+    }
+
+
+
+    return b;
 }

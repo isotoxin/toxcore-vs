@@ -52,7 +52,7 @@ typedef struct {
 
     uint8_t     *nick;
 
-    uint32_t    last_message_number[8]; /* 8 - number of group messages */
+    uint32_t    last_message_number[9]; /* 9 - number of group messages */
     int         friendcon_id;
 
     signed      gid : 24; /* unique per-conference peer id */
@@ -71,7 +71,6 @@ typedef struct {
     uint64_t    next_try_time;
     uint8_t     real_pk[crypto_box_PUBLICKEYBYTES];
     int8_t      fails;
-    int8_t      joingn;
     unsigned    online : 1;
     unsigned    unsubscribed : 1;
 } Group_Join_Peer;
@@ -92,6 +91,7 @@ typedef struct {
 
     uint64_t last_sent_ping;
     uint64_t next_join_check_time;
+    uint64_t last_close_check_time;
 
     uint8_t real_pk[crypto_box_PUBLICKEYBYTES];
     uint8_t title[MAX_NAME_LENGTH];
@@ -152,7 +152,7 @@ typedef struct {
     } lossy_packethandlers[256];
     */
 
-    int( *lossy_packethandler )(void *, int, int, void *, const uint8_t *, uint16_t);
+    int(*lossy_packethandler)(void *, int, int, void *, const uint8_t *, uint16_t);
 } Group_Chats;
 
 
@@ -188,7 +188,6 @@ void g_callback_group_title(Group_Chats *g_c, void (*function)(Messenger *m, uin
  */
 enum {
     CHAT_CHANGE_OCCURRED,
-    __UNUSED__CHAT_CHANGE_PEER_DEL,
     CHAT_CHANGE_PEER_NAME,
 };
 void g_callback_group_namelistchange(Group_Chats *g_c, void (*function)(Messenger *m, int, int, uint8_t, void *));
@@ -209,8 +208,8 @@ int add_groupchat(Group_Chats *g_c, uint8_t type, const uint8_t *uid /*can be NU
  */
 int del_groupchat(Group_Chats *g_c, int groupnumber);
 
-int enter_conference( Group_Chats *g_c, int groupnumber );
-int leave_conference( Group_Chats *g_c, int groupnumber, bool keep_leave );
+int enter_conference(Group_Chats *g_c, int groupnumber);
+int leave_conference(Group_Chats *g_c, int groupnumber, bool keep_leave);
 
 /* Copy the public key of peernumber who is in groupnumber to pk.
  * pk must be crypto_box_PUBLICKEYBYTES long.
@@ -363,9 +362,9 @@ int group_get_type(const Group_Chats *g_c, int groupnumber);
 * return -1 on failure.
 * return type on success.
 */
-int conference_get_id( const Group_Chats *g_c, int groupnumber, uint8_t *uid );
+int conference_get_id(const Group_Chats *g_c, int groupnumber, uint8_t *uid);
 
-int conference_by_uid( const Group_Chats *g_c, const uint8_t *uid );
+int conference_by_uid(const Group_Chats *g_c, const uint8_t *uid);
 
 /* Send current name (set in messenger) to all online groups.
  */
