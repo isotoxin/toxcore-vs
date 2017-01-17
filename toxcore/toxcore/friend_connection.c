@@ -190,7 +190,7 @@ int friend_add_tcp_relay(Friend_Connections *fr_c, int friendcon_id, IP_Port ip_
     }
 
     friend_con->tcp_relays[index].ip_port = ip_port;
-    memcpy(friend_con->tcp_relays[index].public_key, public_key, crypto_box_PUBLICKEYBYTES);
+    memcpy(friend_con->tcp_relays[index].public_key, public_key, CRYPTO_PUBLIC_KEY_SIZE);
     ++friend_con->tcp_relay_counter;
 
     return add_tcp_relay_peer(fr_c->net_crypto, friend_con->crypt_connection_id, ip_port, public_key);
@@ -320,7 +320,7 @@ static void change_dht_pk(Friend_Connections *fr_c, int friendcon_id, const uint
     }
 
     DHT_addfriend(fr_c->dht, dht_public_key, dht_ip_callback, fr_c, friendcon_id, &friend_con->dht_lock);
-    memcpy(friend_con->dht_temp_pk, dht_public_key, crypto_box_PUBLICKEYBYTES);
+    memcpy(friend_con->dht_temp_pk, dht_public_key, CRYPTO_PUBLIC_KEY_SIZE);
 }
 
 static int handle_status(void *object, int number, uint8_t status, void *userdata)
@@ -626,11 +626,11 @@ int get_friendcon_public_keys(uint8_t *real_pk, uint8_t *dht_temp_pk, Friend_Con
     }
 
     if (real_pk) {
-        memcpy(real_pk, friend_con->real_public_key, crypto_box_PUBLICKEYBYTES);
+        memcpy(real_pk, friend_con->real_public_key, CRYPTO_PUBLIC_KEY_SIZE);
     }
 
     if (dht_temp_pk) {
-        memcpy(dht_temp_pk, friend_con->dht_temp_pk, crypto_box_PUBLICKEYBYTES);
+        memcpy(dht_temp_pk, friend_con->dht_temp_pk, CRYPTO_PUBLIC_KEY_SIZE);
     }
 
     return 0;
@@ -722,7 +722,7 @@ int new_friend_connection(Friend_Connections *fr_c, const uint8_t *real_public_k
 
     friend_con->crypt_connection_id = -1;
     friend_con->status = FRIENDCONN_STATUS_CONNECTING;
-    memcpy(friend_con->real_public_key, real_public_key, crypto_box_PUBLICKEYBYTES);
+    memcpy(friend_con->real_public_key, real_public_key, CRYPTO_PUBLIC_KEY_SIZE);
     friend_con->onion_friendnum = onion_friendnum;
 
     recv_tcp_relay_handler(fr_c->onion_c, onion_friendnum, &tcp_relay_node_callback, fr_c, friendcon_id);
@@ -811,7 +811,7 @@ int send_friend_request_packet(Friend_Connections *fr_c, int friendcon_id, uint3
 }
 
 /* Create new friend_connections instance. */
-Friend_Connections *new_friend_connections(Onion_Client *onion_c)
+Friend_Connections *new_friend_connections(Onion_Client *onion_c, bool local_discovery_enabled)
 {
     if (!onion_c) {
         return NULL;
@@ -826,9 +826,13 @@ Friend_Connections *new_friend_connections(Onion_Client *onion_c)
     temp->dht = onion_c->dht;
     temp->net_crypto = onion_c->c;
     temp->onion_c = onion_c;
+    temp->local_discovery_enabled = local_discovery_enabled;
 
     new_connection_handler(temp->net_crypto, &handle_new_connections, temp);
-    LANdiscovery_init(temp->dht);
+
+    if (temp->local_discovery_enabled) {
+        LANdiscovery_init(temp->dht);
+    }
 
     return temp;
 }
@@ -889,7 +893,9 @@ void do_friend_connections(Friend_Connections *fr_c, void *userdata)
         }
     }
 
-    LANdiscovery(fr_c);
+    if (fr_c->local_discovery_enabled) {
+        LANdiscovery(fr_c);
+    }
 }
 
 /* Free everything related with friend_connections. */
@@ -905,6 +911,9 @@ void kill_friend_connections(Friend_Connections *fr_c)
         kill_friend_connection(fr_c, i);
     }
 
-    LANdiscovery_kill(fr_c->dht);
+    if (fr_c->local_discovery_enabled) {
+        LANdiscovery_kill(fr_c->dht);
+    }
+
     free(fr_c);
 }

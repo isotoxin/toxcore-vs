@@ -106,6 +106,9 @@
     <ClCompile Include="..\toxav\groupav.c">
       <Filter>av</Filter>
     </ClCompile>
+    <ClCompile Include="..\toxcore\crypto_core_mem.c">
+      <Filter>core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\toxav\msi.h">
@@ -168,7 +171,7 @@
     <ClInclude Include="..\toxcore\ping_array.h">
       <Filter>core</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\pthread_win32\pthread.h">
+    <ClInclude Include="..\..\pthread_simple\pthread.h">
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="..\toxcore\TCP_client.h">

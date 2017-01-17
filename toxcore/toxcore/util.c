@@ -22,13 +22,16 @@
  *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _XOPEN_SOURCE 600
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #include "util.h"
 
-#include "crypto_core.h" /* for crypto_box_PUBLICKEYBYTES */
+#include "crypto_core.h" /* for CRYPTO_PUBLIC_KEY_SIZE */
+#include "network.h" /* for current_time_monotonic */
 
 #include <time.h>
 
@@ -65,22 +68,8 @@ bool id_equal(const uint8_t *dest, const uint8_t *src)
 
 uint32_t id_copy(uint8_t *dest, const uint8_t *src)
 {
-    memcpy(dest, src, crypto_box_PUBLICKEYBYTES);
-    return crypto_box_PUBLICKEYBYTES;
-}
-
-void host_to_net(uint8_t *num, uint16_t numbytes)
-{
-#ifndef WORDS_BIGENDIAN
-    uint32_t i;
-    DYNAMIC( uint8_t, buff, numbytes ); // -C99
-
-    for (i = 0; i < numbytes; ++i) {
-        buff[i] = num[numbytes - i - 1];
-    }
-
-    memcpy(num, buff, numbytes);
-#endif
+    memcpy(dest, src, CRYPTO_PUBLIC_KEY_SIZE);
+    return CRYPTO_PUBLIC_KEY_SIZE;
 }
 
 uint16_t lendian_to_host16(uint16_t lendian)
@@ -113,13 +102,11 @@ void lendian_to_host32(uint32_t *dest, const uint8_t *lendian)
 }
 
 /* state load/save */
-int load_state(load_state_callback_func load_state_callback, void *outer,
+int load_state(load_state_callback_func load_state_callback, Logger *log, void *outer,
                const uint8_t *data, uint32_t length, uint16_t cookie_inner)
 {
     if (!load_state_callback || !data) {
-#ifdef TOX_DEBUG
-        fprintf(stderr, "load_state() called with invalid args.\n");
-#endif
+        LOGGER_ERROR(log, "load_state() called with invalid args.\n");
         return -1;
     }
 
@@ -136,17 +123,13 @@ int load_state(load_state_callback_func load_state_callback, void *outer,
 
         if (length < length_sub) {
             /* file truncated */
-#ifdef TOX_DEBUG
-            fprintf(stderr, "state file too short: %u < %u\n", length, length_sub);
-#endif
+            LOGGER_ERROR(log, "state file too short: %u < %u\n", length, length_sub);
             return -1;
         }
 
         if (lendian_to_host16((cookie_type >> 16)) != cookie_inner) {
             /* something is not matching up in a bad way, give up */
-#ifdef DEBUG
-            fprintf(stderr, "state file garbled: %04x != %04x\n", (cookie_type >> 16), cookie_inner);
-#endif
+            LOGGER_ERROR(log, "state file garbled: %04x != %04x\n", (cookie_type >> 16), cookie_inner);
             return -1;
         }
 

@@ -21,6 +21,8 @@
  *
  */
 
+#define _XOPEN_SOURCE 600
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -37,28 +39,28 @@ typedef struct Messenger Tox;
 
 #define SET_ERROR_PARAMETER(param, x) {if(param) {*param = x;}}
 
-#if TOX_HASH_LENGTH != crypto_hash_sha256_BYTES
-#error TOX_HASH_LENGTH is assumed to be equal to crypto_hash_sha256_BYTES
+#if TOX_HASH_LENGTH != CRYPTO_SHA256_SIZE
+#error TOX_HASH_LENGTH is assumed to be equal to CRYPTO_SHA256_SIZE
 #endif
 
-#if FILE_ID_LENGTH != crypto_box_KEYBYTES
-#error FILE_ID_LENGTH is assumed to be equal to crypto_box_KEYBYTES
+#if FILE_ID_LENGTH != CRYPTO_SYMMETRIC_KEY_SIZE
+#error FILE_ID_LENGTH is assumed to be equal to CRYPTO_SYMMETRIC_KEY_SIZE
 #endif
 
-#if TOX_FILE_ID_LENGTH != crypto_box_KEYBYTES
-#error TOX_FILE_ID_LENGTH is assumed to be equal to crypto_box_KEYBYTES
+#if TOX_FILE_ID_LENGTH != CRYPTO_SYMMETRIC_KEY_SIZE
+#error TOX_FILE_ID_LENGTH is assumed to be equal to CRYPTO_SYMMETRIC_KEY_SIZE
 #endif
 
 #if TOX_FILE_ID_LENGTH != TOX_HASH_LENGTH
 #error TOX_FILE_ID_LENGTH is assumed to be equal to TOX_HASH_LENGTH
 #endif
 
-#if TOX_PUBLIC_KEY_SIZE != crypto_box_PUBLICKEYBYTES
-#error TOX_PUBLIC_KEY_SIZE is assumed to be equal to crypto_box_PUBLICKEYBYTES
+#if TOX_PUBLIC_KEY_SIZE != CRYPTO_PUBLIC_KEY_SIZE
+#error TOX_PUBLIC_KEY_SIZE is assumed to be equal to CRYPTO_PUBLIC_KEY_SIZE
 #endif
 
-#if TOX_SECRET_KEY_SIZE != crypto_box_SECRETKEYBYTES
-#error TOX_SECRET_KEY_SIZE is assumed to be equal to crypto_box_SECRETKEYBYTES
+#if TOX_SECRET_KEY_SIZE != CRYPTO_SECRET_KEY_SIZE
+#error TOX_SECRET_KEY_SIZE is assumed to be equal to CRYPTO_SECRET_KEY_SIZE
 #endif
 
 #if TOX_MAX_NAME_LENGTH != MAX_NAME_LENGTH
@@ -69,117 +71,12 @@ typedef struct Messenger Tox;
 #error TOX_MAX_STATUS_MESSAGE_LENGTH is assumed to be equal to MAX_STATUSMESSAGE_LENGTH
 #endif
 
-#if TOX_CONFERENCE_UID_SIZE != (GROUP_IDENTIFIER_LENGTH-1)
-#error TOX_CONFERENCE_UID_SIZE is assumed to be equal to (GROUP_IDENTIFIER_LENGTH-1)
-#endif
-
-uint32_t tox_version_major(void)
-{
-    return TOX_VERSION_MAJOR;
-}
-
-uint32_t tox_version_minor(void)
-{
-    return TOX_VERSION_MINOR;
-}
-
-uint32_t tox_version_patch(void)
-{
-    return TOX_VERSION_PATCH;
-}
 
 bool tox_version_is_compatible(uint32_t major, uint32_t minor, uint32_t patch)
 {
-    return (TOX_VERSION_MAJOR == major && /* Force the major version */
-            (TOX_VERSION_MINOR > minor || /* Current minor version must be newer than requested -- or -- */
-             (TOX_VERSION_MINOR == minor && TOX_VERSION_PATCH >= patch) /* the patch must be the same or newer */
-            )
-           );
+    return TOX_VERSION_IS_API_COMPATIBLE(major, minor, patch);
 }
 
-
-#define CONST_FUNCTION(lowercase, uppercase) \
-uint32_t tox_##lowercase(void) \
-{ \
-    return TOX_##uppercase; \
-}
-
-CONST_FUNCTION(public_key_size, PUBLIC_KEY_SIZE)
-CONST_FUNCTION(secret_key_size, SECRET_KEY_SIZE)
-CONST_FUNCTION(address_size, ADDRESS_SIZE)
-CONST_FUNCTION(max_name_length, MAX_NAME_LENGTH)
-CONST_FUNCTION(max_status_message_length, MAX_STATUS_MESSAGE_LENGTH)
-CONST_FUNCTION(max_friend_request_length, MAX_FRIEND_REQUEST_LENGTH)
-CONST_FUNCTION(max_message_length, MAX_MESSAGE_LENGTH)
-CONST_FUNCTION(max_custom_packet_size, MAX_CUSTOM_PACKET_SIZE)
-CONST_FUNCTION(hash_length, HASH_LENGTH)
-CONST_FUNCTION(file_id_length, FILE_ID_LENGTH)
-CONST_FUNCTION(max_filename_length, MAX_FILENAME_LENGTH)
-
-
-#define ACCESSORS(type, ns, name) \
-type tox_options_get_##ns##name(const struct Tox_Options *options) \
-{ \
-    return options->ns##name; \
-} \
-void tox_options_set_##ns##name(struct Tox_Options *options, type name) \
-{ \
-    options->ns##name = name; \
-}
-
-ACCESSORS(bool, , ipv6_enabled)
-ACCESSORS(bool, , udp_enabled)
-ACCESSORS(TOX_PROXY_TYPE, proxy_ , type)
-ACCESSORS(const char *, proxy_ , host)
-ACCESSORS(uint16_t, proxy_ , port)
-ACCESSORS(uint16_t, , start_port)
-ACCESSORS(uint16_t, , end_port)
-ACCESSORS(uint16_t, , tcp_port)
-ACCESSORS(TOX_SAVEDATA_TYPE, savedata_, type)
-ACCESSORS(size_t, savedata_, length)
-ACCESSORS(tox_log_cb *, log_, callback)
-ACCESSORS(void *, log_, user_data)
-
-const uint8_t *tox_options_get_savedata_data(const struct Tox_Options *options)
-{
-    return options->savedata_data;
-}
-
-void tox_options_set_savedata_data(struct Tox_Options *options, const uint8_t *data, size_t length)
-{
-    options->savedata_data = data;
-    options->savedata_length = length;
-}
-
-
-void tox_options_default(struct Tox_Options *options)
-{
-    if (options) {
-        memset(options, 0, sizeof(struct Tox_Options));
-        options->ipv6_enabled = 1;
-        options->udp_enabled = 1;
-        options->proxy_type = TOX_PROXY_TYPE_NONE;
-    }
-}
-
-struct Tox_Options *tox_options_new(TOX_ERR_OPTIONS_NEW *error)
-{
-    struct Tox_Options *options = (struct Tox_Options *)calloc(sizeof(struct Tox_Options), 1);
-
-    if (options) {
-        tox_options_default(options);
-        SET_ERROR_PARAMETER(error, TOX_ERR_OPTIONS_NEW_OK);
-        return options;
-    }
-
-    SET_ERROR_PARAMETER(error, TOX_ERR_OPTIONS_NEW_MALLOC);
-    return NULL;
-}
-
-void tox_options_free(struct Tox_Options *options)
-{
-    free(options);
-}
 
 Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
 {
@@ -192,27 +89,27 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
     if (options == NULL) {
         m_options.ipv6enabled = TOX_ENABLE_IPV6_DEFAULT;
     } else {
-        if (options->savedata_type != TOX_SAVEDATA_TYPE_NONE) {
-            if (options->savedata_data == NULL || options->savedata_length == 0) {
+        if (tox_options_get_savedata_type(options) != TOX_SAVEDATA_TYPE_NONE) {
+            if (tox_options_get_savedata_data(options) == NULL || tox_options_get_savedata_length(options) == 0) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_BAD_FORMAT);
                 return NULL;
             }
         }
 
-        if (options->savedata_type == TOX_SAVEDATA_TYPE_SECRET_KEY) {
-            if (options->savedata_length != TOX_SECRET_KEY_SIZE) {
+        if (tox_options_get_savedata_type(options) == TOX_SAVEDATA_TYPE_SECRET_KEY) {
+            if (tox_options_get_savedata_length(options) != TOX_SECRET_KEY_SIZE) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_BAD_FORMAT);
                 return NULL;
             }
 
             load_savedata_sk = 1;
-        } else if (options->savedata_type == TOX_SAVEDATA_TYPE_TOX_SAVE) {
-            if (options->savedata_length < TOX_ENC_SAVE_MAGIC_LENGTH) {
+        } else if (tox_options_get_savedata_type(options) == TOX_SAVEDATA_TYPE_TOX_SAVE) {
+            if (tox_options_get_savedata_length(options) < TOX_ENC_SAVE_MAGIC_LENGTH) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_BAD_FORMAT);
                 return NULL;
             }
 
-            if (sodium_memcmp(options->savedata_data, TOX_ENC_SAVE_MAGIC_NUMBER, TOX_ENC_SAVE_MAGIC_LENGTH) == 0) {
+            if (crypto_memcmp(tox_options_get_savedata_data(options), TOX_ENC_SAVE_MAGIC_NUMBER, TOX_ENC_SAVE_MAGIC_LENGTH) == 0) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_ENCRYPTED);
                 return NULL;
             }
@@ -220,16 +117,18 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
             load_savedata_tox = 1;
         }
 
-        m_options.ipv6enabled = options->ipv6_enabled;
-        m_options.udp_disabled = !options->udp_enabled;
-        m_options.port_range[0] = options->start_port;
-        m_options.port_range[1] = options->end_port;
-        m_options.tcp_server_port = options->tcp_port;
+        m_options.ipv6enabled = tox_options_get_ipv6_enabled(options);
+        m_options.udp_disabled = !tox_options_get_udp_enabled(options);
+        m_options.port_range[0] = tox_options_get_start_port(options);
+        m_options.port_range[1] = tox_options_get_end_port(options);
+        m_options.tcp_server_port = tox_options_get_tcp_port(options);
+        m_options.hole_punching_enabled = tox_options_get_hole_punching_enabled(options);
+        m_options.local_discovery_enabled = tox_options_get_local_discovery_enabled(options);
 
-        m_options.log_callback = (logger_cb *)options->log_callback;
-        m_options.log_user_data = options->log_user_data;
+        m_options.log_callback = (logger_cb *)tox_options_get_log_callback(options);
+        m_options.log_user_data = tox_options_get_log_user_data(options);
 
-        switch (options->proxy_type) {
+        switch (tox_options_get_proxy_type(options)) {
             case TOX_PROXY_TYPE_HTTP:
                 m_options.proxy_info.proxy_type = TCP_PROXY_HTTP;
                 break;
@@ -248,7 +147,7 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
         }
 
         if (m_options.proxy_info.proxy_type != TCP_PROXY_NONE) {
-            if (options->proxy_port == 0) {
+            if (tox_options_get_proxy_port(options) == 0) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_PROXY_BAD_PORT);
                 return NULL;
             }
@@ -259,13 +158,13 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
                 m_options.proxy_info.ip_port.ip.family = AF_UNSPEC;
             }
 
-            if (!addr_resolve_or_parse_ip(options->proxy_host, &m_options.proxy_info.ip_port.ip, NULL)) {
+            if (!addr_resolve_or_parse_ip(tox_options_get_proxy_host(options), &m_options.proxy_info.ip_port.ip, NULL)) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_PROXY_BAD_HOST);
                 // TODO(irungentoo): TOX_ERR_NEW_PROXY_NOT_FOUND if domain.
                 return NULL;
             }
 
-            m_options.proxy_info.ip_port.port = htons(options->proxy_port);
+            m_options.proxy_info.ip_port.port = htons(tox_options_get_proxy_port(options));
         }
     }
 
@@ -286,10 +185,11 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
         return NULL;
     }
 
-    if (load_savedata_tox && messenger_load(m, options->savedata_data, options->savedata_length) == -1) {
+    if (load_savedata_tox
+            && messenger_load(m, tox_options_get_savedata_data(options), tox_options_get_savedata_length(options)) == -1) {
         SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_BAD_FORMAT);
     } else if (load_savedata_sk) {
-        load_secret_key(m->net_crypto, options->savedata_data);
+        load_secret_key(m->net_crypto, tox_options_get_savedata_data(options));
         SET_ERROR_PARAMETER(error, TOX_ERR_NEW_OK);
     } else {
         SET_ERROR_PARAMETER(error, TOX_ERR_NEW_OK);
@@ -309,17 +209,17 @@ void tox_kill(Tox *tox)
     kill_messenger(m);
 }
 
-size_t tox_get_savedata_size(const Tox *tox)
+size_t tox_get_savedata_size(const Tox *tox, uint8_t save_friends)
 {
     const Messenger *m = tox;
-    return messenger_size(m);
+    return messenger_size(m, save_friends);
 }
 
-void tox_get_savedata(const Tox *tox, uint8_t *savedata)
+void tox_get_savedata(const Tox *tox, uint8_t *savedata, uint8_t save_friends)
 {
     if (savedata) {
         const Messenger *m = tox;
-        messenger_save(m, savedata);
+        messenger_save(m, savedata, save_friends);
     }
 }
 
@@ -499,7 +399,7 @@ void tox_self_get_public_key(const Tox *tox, uint8_t *public_key)
     const Messenger *m = tox;
 
     if (public_key) {
-        memcpy(public_key, m->net_crypto->self_public_key, crypto_box_PUBLICKEYBYTES);
+        memcpy(public_key, m->net_crypto->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
     }
 }
 
@@ -508,7 +408,7 @@ void tox_self_get_secret_key(const Tox *tox, uint8_t *secret_key)
     const Messenger *m = tox;
 
     if (secret_key) {
-        memcpy(secret_key, m->net_crypto->self_secret_key, crypto_box_SECRETKEYBYTES);
+        memcpy(secret_key, m->net_crypto->self_secret_key, CRYPTO_SECRET_KEY_SIZE);
     }
 }
 
@@ -989,7 +889,7 @@ bool tox_hash(uint8_t *hash, const uint8_t *data, size_t length)
         return 0;
     }
 
-    crypto_hash_sha256(hash, data, length);
+    crypto_sha256(hash, data, length);
     return 1;
 }
 
@@ -1674,7 +1574,7 @@ bool tox_friend_send_lossy_packet(Tox *tox, uint32_t friend_number, const uint8_
         return 0;
     }
 
-    int ret = send_custom_lossy_packet(m, friend_number, data, length);
+    int ret = m_send_custom_lossy_packet(m, friend_number, data, length);
 
     set_custom_packet_error(ret, error);
 
@@ -1734,7 +1634,7 @@ void tox_self_get_dht_id(const Tox *tox, uint8_t *dht_id)
 {
     if (dht_id) {
         const Messenger *m = tox;
-        memcpy(dht_id , m->dht->self_public_key, crypto_box_PUBLICKEYBYTES);
+        memcpy(dht_id , m->dht->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
     }
 }
 

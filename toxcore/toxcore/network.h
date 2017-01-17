@@ -44,6 +44,10 @@
 #define WINVER 0x0501
 #endif
 
+#ifdef _MSC_VER
+#define __extension__
+#endif
+
 // The mingw32/64 Windows library warns about including winsock2.h after
 // windows.h even though with the above it's a valid thing to do. So, to make
 // mingw32 headers happy, we include winsock2.h first.
@@ -163,7 +167,7 @@ IP6;
 
 typedef struct {
     uint8_t family;
-    union {
+    __extension__ union {
         IP4 ip4;
         IP6 ip6;
     };

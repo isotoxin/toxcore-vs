@@ -21,6 +21,9 @@
  *
  */
 
+#define _DARWIN_C_SOURCE
+#define _XOPEN_SOURCE 600
+
 #if defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_WINXP
 #define _WIN32_WINNT  0x501
 #endif
@@ -547,9 +550,7 @@ Networking_Core *new_networking_ex(Logger *log, IP ip, uint16_t port_from, uint1
 
     /* maybe check for invalid IPs like 224+.x.y.z? if there is any IP set ever */
     if (ip.family != AF_INET && ip.family != AF_INET6) {
-#ifdef TOX_DEBUG
-        fprintf(stderr, "Invalid address family: %u\n", ip.family);
-#endif
+        LOGGER_ERROR(log, "Invalid address family: %u\n", ip.family);
         return NULL;
     }
 
@@ -573,9 +574,7 @@ Networking_Core *new_networking_ex(Logger *log, IP ip, uint16_t port_from, uint1
 
     /* Check for socket error. */
     if (!sock_valid(temp->sock)) {
-#ifdef TOX_DEBUG
-        fprintf(stderr, "Failed to get a socket?! %u, %s\n", errno, strerror(errno));
-#endif
+        LOGGER_ERROR(log, "Failed to get a socket?! %u, %s\n", errno, strerror(errno));
         free(temp);
 
         if (error) {

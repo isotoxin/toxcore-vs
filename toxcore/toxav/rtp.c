@@ -110,10 +110,10 @@ int rtp_stop_receiving(RTPSession *session)
     LOGGER_DEBUG(session->m->log, "Stopped receiving on session: %p", session);
     return 0;
 }
-int rtp_send_data(RTPSession *session, const uint8_t *data, uint16_t length)
+int rtp_send_data(RTPSession *session, const uint8_t *data, uint16_t length, Logger *log)
 {
     if (!session) {
-        LOGGER_WARNING(session->m->log, "No session!");
+        LOGGER_ERROR(log, "No session!");
         return -1;
     }
 
@@ -148,7 +148,7 @@ int rtp_send_data(RTPSession *session, const uint8_t *data, uint16_t length)
 
         memcpy(rdata + 1 + sizeof(struct RTPHeader), data, length);
 
-        if (-1 == send_custom_lossy_packet(session->m, session->friend_number, rdata, sizeOf(rdata))) {
+        if (-1 == m_send_custom_lossy_packet(session->m, session->friend_number, rdata, sizeOf(rdata))) {
             LOGGER_WARNING(session->m->log, "RTP send failed (len: %d)! std error: %s", sizeOf(rdata), strerror(errno));
         }
     } else {
@@ -164,7 +164,7 @@ int rtp_send_data(RTPSession *session, const uint8_t *data, uint16_t length)
         while ((length - sent) + sizeof(struct RTPHeader) + 1 > MAX_CRYPTO_DATA_SIZE) {
             memcpy(rdata + 1 + sizeof(struct RTPHeader), data + sent, piece);
 
-            if (-1 == send_custom_lossy_packet(session->m, session->friend_number,
+            if (-1 == m_send_custom_lossy_packet(session->m, session->friend_number,
                                                rdata, piece + sizeof(struct RTPHeader) + 1)) {
                 LOGGER_WARNING(session->m->log, "RTP send failed (len: %d)! std error: %s",
                                piece + sizeof(struct RTPHeader) + 1, strerror(errno));
@@ -180,7 +180,7 @@ int rtp_send_data(RTPSession *session, const uint8_t *data, uint16_t length)
         if (piece) {
             memcpy(rdata + 1 + sizeof(struct RTPHeader), data + sent, piece);
 
-            if (-1 == send_custom_lossy_packet(session->m, session->friend_number, rdata,
+            if (-1 == m_send_custom_lossy_packet(session->m, session->friend_number, rdata,
                                                piece + sizeof(struct RTPHeader) + 1)) {
                 LOGGER_WARNING(session->m->log, "RTP send failed (len: %d)! std error: %s",
                                piece + sizeof(struct RTPHeader) + 1, strerror(errno));

@@ -39,7 +39,7 @@
 #define MAX_CONCURRENT_FILE_PIPES 256
 
 
-#define FRIEND_ADDRESS_SIZE (crypto_box_PUBLICKEYBYTES + sizeof(uint32_t) + sizeof(uint16_t))
+#define FRIEND_ADDRESS_SIZE (CRYPTO_PUBLIC_KEY_SIZE + sizeof(uint32_t) + sizeof(uint16_t))
 
 enum {
     MESSAGE_NORMAL,
@@ -77,6 +77,9 @@ typedef struct {
     TCP_Proxy_Info proxy_info;
     uint16_t port_range[2];
     uint16_t tcp_server_port;
+
+    uint8_t hole_punching_enabled;
+    bool local_discovery_enabled;
 
     logger_cb *log_callback;
     void *log_user_data;
@@ -177,7 +180,7 @@ enum {
 typedef struct Messenger Messenger;
 
 typedef struct {
-    uint8_t real_pk[crypto_box_PUBLICKEYBYTES];
+    uint8_t real_pk[CRYPTO_PUBLIC_KEY_SIZE];
     int friendcon_id;
 
     uint8_t *client_caps;
@@ -318,7 +321,7 @@ int32_t m_addfriend_norequest(Messenger *m, const uint8_t *real_pk);
 int32_t getfriend_id(const Messenger *m, const uint8_t *real_pk);
 
 /* Copies the public key associated to that friend id into real_pk buffer.
- * Make sure that real_pk is of size crypto_box_PUBLICKEYBYTES.
+ * Make sure that real_pk is of size CRYPTO_PUBLIC_KEY_SIZE.
  *
  *  return 0 if success
  *  return -1 if failure
@@ -762,10 +765,10 @@ uint32_t messenger_run_interval(const Messenger *m);
 /* SAVING AND LOADING FUNCTIONS: */
 
 /* return size of the messenger data (for saving). */
-uint32_t messenger_size(const Messenger *m);
+uint32_t messenger_size(const Messenger *m, bool save_friends);
 
 /* Save the messenger in data (must be allocated memory of size Messenger_size()) */
-void messenger_save(const Messenger *m, uint8_t *data);
+void messenger_save(const Messenger *m, uint8_t *data, bool save_friends);
 
 /* Load the messenger from data of size length. */
 int messenger_load(Messenger *m, const uint8_t *data, uint32_t length);

@@ -29,20 +29,64 @@
 
 #include "crypto_core.h"
 
-#if crypto_box_PUBLICKEYBYTES != 32
-#error crypto_box_PUBLICKEYBYTES is required to be 32 bytes for public_key_cmp to work,
+#include "network.h"
+
+#include <string.h>
+
+#ifndef VANILLA_NACL
+/* We use libsodium by default. */
+#include <sodium.h>
+#else
+#include <crypto_box.h>
+#include <crypto_hash_sha256.h>
+#include <crypto_hash_sha512.h>
+#include <crypto_scalarmult_curve25519.h>
+#include <crypto_verify_16.h>
+#include <crypto_verify_32.h>
+#include <randombytes.h>
+#define crypto_box_MACBYTES (crypto_box_ZEROBYTES - crypto_box_BOXZEROBYTES)
 #endif
 
-/* compare 2 public keys of length crypto_box_PUBLICKEYBYTES, not vulnerable to timing attacks.
-   returns 0 if both mem locations of length are equal,
-   return -1 if they are not. */
-int public_key_cmp(const uint8_t *pk1, const uint8_t *pk2)
+#if CRYPTO_PUBLIC_KEY_SIZE != crypto_box_PUBLICKEYBYTES
+#error CRYPTO_PUBLIC_KEY_SIZE should be equal to crypto_box_PUBLICKEYBYTES
+#endif
+
+#if CRYPTO_SECRET_KEY_SIZE != crypto_box_SECRETKEYBYTES
+#error CRYPTO_SECRET_KEY_SIZE should be equal to crypto_box_SECRETKEYBYTES
+#endif
+
+#if CRYPTO_SHARED_KEY_SIZE != crypto_box_BEFORENMBYTES
+#error CRYPTO_SHARED_KEY_SIZE should be equal to crypto_box_BEFORENMBYTES
+#endif
+
+#if CRYPTO_SYMMETRIC_KEY_SIZE != crypto_box_BEFORENMBYTES
+#error CRYPTO_SYMMETRIC_KEY_SIZE should be equal to crypto_box_BEFORENMBYTES
+#endif
+
+#if CRYPTO_MAC_SIZE != crypto_box_MACBYTES
+#error CRYPTO_MAC_SIZE should be equal to crypto_box_MACBYTES
+#endif
+
+#if CRYPTO_NONCE_SIZE != crypto_box_NONCEBYTES
+#error CRYPTO_NONCE_SIZE should be equal to crypto_box_NONCEBYTES
+#endif
+
+#if CRYPTO_SHA256_SIZE != crypto_hash_sha256_BYTES
+#error CRYPTO_SHA256_SIZE should be equal to crypto_hash_sha256_BYTES
+#endif
+
+#if CRYPTO_SHA512_SIZE != crypto_hash_sha512_BYTES
+#error CRYPTO_SHA512_SIZE should be equal to crypto_hash_sha512_BYTES
+#endif
+
+int32_t public_key_cmp(const uint8_t *pk1, const uint8_t *pk2)
 {
+#if CRYPTO_PUBLIC_KEY_SIZE != 32
+#error CRYPTO_PUBLIC_KEY_SIZE is required to be 32 bytes for public_key_cmp to work,
+#endif
     return crypto_verify_32(pk1, pk2);
 }
 
-/*  return a random number.
- */
 uint32_t random_int(void)
 {
     uint32_t randnum;
@@ -57,13 +101,7 @@ uint64_t random_64b(void)
     return randnum;
 }
 
-/* Check if a Tox public key crypto_box_PUBLICKEYBYTES is valid or not.
- * This should only be used for input validation.
- *
- * return 0 if it isn't.
- * return 1 if it is.
- */
-int public_key_valid(const uint8_t *public_key)
+bool public_key_valid(const uint8_t *public_key)
 {
     if (public_key[31] >= 128) { /* Last bit of key is always zero. */
         return 0;
@@ -75,15 +113,15 @@ int public_key_valid(const uint8_t *public_key)
 /* Precomputes the shared key from their public_key and our secret_key.
  * This way we can avoid an expensive elliptic curve scalar multiply for each
  * encrypt/decrypt operation.
- * enc_key has to be crypto_box_BEFORENMBYTES bytes long.
+ * shared_key has to be crypto_box_BEFORENMBYTES bytes long.
  */
-int encrypt_precompute(const uint8_t *public_key, const uint8_t *secret_key, uint8_t *enc_key)
+int32_t encrypt_precompute(const uint8_t *public_key, const uint8_t *secret_key, uint8_t *shared_key)
 {
-    return crypto_box_beforenm(enc_key, public_key, secret_key);
+    return crypto_box_beforenm(shared_key, public_key, secret_key);
 }
 
-int encrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *plain, uint32_t length,
-                           uint8_t *encrypted)
+int32_t encrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *plain, size_t length,
+                               uint8_t *encrypted)
 {
     if (length == 0 || !secret_key || !nonce || !plain || !encrypted) {
         return -1;
@@ -104,8 +142,8 @@ int encrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, cons
     return length + crypto_box_MACBYTES;
 }
 
-int decrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *encrypted, uint32_t length,
-                           uint8_t *plain)
+int32_t decrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, const uint8_t *encrypted, size_t length,
+                               uint8_t *plain)
 {
     if (length <= crypto_box_BOXZEROBYTES || !secret_key || !nonce || !encrypted || !plain) {
         return -1;
@@ -125,8 +163,8 @@ int decrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, cons
     return length - crypto_box_MACBYTES;
 }
 
-int encrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uint8_t *nonce,
-                 const uint8_t *plain, uint32_t length, uint8_t *encrypted)
+int32_t encrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uint8_t *nonce,
+                     const uint8_t *plain, size_t length, uint8_t *encrypted)
 {
     if (!public_key || !secret_key) {
         return -1;
@@ -135,12 +173,12 @@ int encrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uin
     uint8_t k[crypto_box_BEFORENMBYTES];
     encrypt_precompute(public_key, secret_key, k);
     int ret = encrypt_data_symmetric(k, nonce, plain, length, encrypted);
-    sodium_memzero(k, sizeof k);
+    crypto_memzero(k, sizeof k);
     return ret;
 }
 
-int decrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uint8_t *nonce,
-                 const uint8_t *encrypted, uint32_t length, uint8_t *plain)
+int32_t decrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uint8_t *nonce,
+                     const uint8_t *encrypted, size_t length, uint8_t *plain)
 {
     if (!public_key || !secret_key) {
         return -1;
@@ -149,7 +187,7 @@ int decrypt_data(const uint8_t *public_key, const uint8_t *secret_key, const uin
     uint8_t k[crypto_box_BEFORENMBYTES];
     encrypt_precompute(public_key, secret_key, k);
     int ret = decrypt_data_symmetric(k, nonce, encrypted, length, plain);
-    sodium_memzero(k, sizeof k);
+    crypto_memzero(k, sizeof k);
     return ret;
 }
 
@@ -204,8 +242,33 @@ void random_nonce(uint8_t *nonce)
     randombytes(nonce, crypto_box_NONCEBYTES);
 }
 
-/* Fill a key crypto_box_KEYBYTES big with random bytes */
+/* Fill a key CRYPTO_SYMMETRIC_KEY_SIZE big with random bytes */
 void new_symmetric_key(uint8_t *key)
 {
-    randombytes(key, crypto_box_KEYBYTES);
+    randombytes(key, CRYPTO_SYMMETRIC_KEY_SIZE);
+}
+
+int32_t crypto_new_keypair(uint8_t *public_key, uint8_t *secret_key)
+{
+    return crypto_box_keypair(public_key, secret_key);
+}
+
+void crypto_derive_public_key(uint8_t *public_key, const uint8_t *secret_key)
+{
+    crypto_scalarmult_curve25519_base(public_key, secret_key);
+}
+
+void crypto_sha256(uint8_t *hash, const uint8_t *data, size_t length)
+{
+    crypto_hash_sha256(hash, data, length);
+}
+
+void crypto_sha512(uint8_t *hash, const uint8_t *data, size_t length)
+{
+    crypto_hash_sha512(hash, data, length);
+}
+
+void random_bytes(uint8_t *data, size_t length)
+{
+    randombytes(data, length);
 }

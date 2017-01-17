@@ -29,6 +29,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "logger.h"
+
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define PAIR(TYPE1__, TYPE2__) struct { TYPE1__ first; TYPE2__ second; }
 
@@ -41,7 +43,22 @@ int is_timeout(uint64_t timestamp, uint64_t timeout);
 bool id_equal(const uint8_t *dest, const uint8_t *src);
 uint32_t id_copy(uint8_t *dest, const uint8_t *src); /* return value is CLIENT_ID_SIZE */
 
-void host_to_net(uint8_t *num, uint16_t numbytes);
+inline void host_to_net(uint8_t *num, uint16_t numbytes)
+{
+#ifndef WORDS_BIGENDIAN
+
+    size_t half = numbytes / 2;
+    for (size_t x = 0; x < half; ++x)
+    {
+        uint8_t t = num[x];
+        num[x] = num[numbytes - 1 - x];
+        num[numbytes - 1 - x] = t;
+    }
+
+#endif
+}
+
+
 #define net_to_host(x, y) host_to_net(x, y)
 
 uint16_t lendian_to_host16(uint16_t lendian);
@@ -52,7 +69,7 @@ void lendian_to_host32(uint32_t *dest, const uint8_t *lendian);
 
 /* state load/save */
 typedef int (*load_state_callback_func)(void *outer, const uint8_t *data, uint32_t len, uint16_t type);
-int load_state(load_state_callback_func load_state_callback, void *outer,
+int load_state(load_state_callback_func load_state_callback, Logger *log, void *outer,
                const uint8_t *data, uint32_t length, uint16_t cookie_inner);
 
 /* Returns -1 if failed or 0 if success */
