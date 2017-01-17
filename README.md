@@ -1,6 +1,6 @@
 # toxcore-vs 
 
-All necessary libs to build static toxcore using Visual Studio 2013/2015
+All necessary libs to build static toxcore using Visual Studio 2015 (2013 is no longer supported)
 
 <h4>Differences from the original toxcore</h4>
 
@@ -18,8 +18,8 @@ There are some addition api functions in toxcore-vs:<br>
 - `bool tox_friend_send_lossless_packet2(Tox *tox, uint32_t friend_number, const uint8_t *data1, size_t length1, const uint8_t *data2, size_t length2);`<br>
 
 <h4>Build</h4>
-1. Install Visual Studio 2013/2015 any desktop version (if not yet)<br />
-2. run `build_libs_[2013/2015].cmd` to build 32 bit libs; run `build_libs_2015.cmd 64` to build 64 bit libs<br />
+1. Install Visual Studio 2015 any desktop version (if not yet)<br />
+2. run `build_libs_2015.cmd` to build 32 bit libs; run `build_libs_2015.cmd 64` to build 64 bit libs<br />
 
 Another way - create solution and add project (*.vcxproj) files, then build from msvs gui
 
