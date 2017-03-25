@@ -1,24 +1,22 @@
-/**  bwcontroller.c
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2013-2015 Tox project.
  *
- *   Copyright (C) 2013-2015 Tox project All Rights Reserved.
+ * This file is part of Tox, the free peer to peer instant messenger.
  *
- *   This file is part of Tox.
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- *   Tox is free software: you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation, either version 3 of the License, or
- *   (at your option) any later version.
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *   Tox is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with Tox. If not, see <http://www.gnu.org/licenses/>.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
@@ -31,6 +29,7 @@
 #include "../toxcore/util.h"
 
 #include <assert.h>
+#include <errno.h>
 
 #define BWC_PACKET_ID 196
 #define BWC_SEND_INTERVAL_MS 1000
@@ -170,8 +169,8 @@ void send_update(BWController *bwc)
             struct BWCMessage *b_msg = (struct BWCMessage *)(p_msg + 1);
 
             p_msg[0] = BWC_PACKET_ID;
-            b_msg->lost = htonl(bwc->cycle.lost);
-            b_msg->recv = htonl(bwc->cycle.recv);
+            b_msg->lost = net_htonl(bwc->cycle.lost);
+            b_msg->recv = net_htonl(bwc->cycle.recv);
 
             if (-1 == m_send_custom_lossy_packet(bwc->m, bwc->friend_number, p_msg, sizeof(p_msg))) {
                 LOGGER_WARNING(bwc->m->log, "BWC send failed (len: %d)! std error: %s", sizeof(p_msg), strerror(errno));
@@ -193,8 +192,8 @@ static int on_update(BWController *bwc, const struct BWCMessage *msg)
 
     bwc->cycle.lru = current_time_monotonic();
 
-    uint32_t recv = ntohl(msg->recv);
-    uint32_t lost = ntohl(msg->lost);
+    uint32_t recv = net_ntohl(msg->recv);
+    uint32_t lost = net_ntohl(msg->lost);
 
     LOGGER_DEBUG(bwc->m->log, "recved: %u lost: %u", recv, lost);
 

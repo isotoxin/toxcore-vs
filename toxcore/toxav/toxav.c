@@ -1,24 +1,22 @@
-/**  toxav.c
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2013-2015 Tox project.
  *
- *   Copyright (C) 2013-2015 Tox project All Rights Reserved.
+ * This file is part of Tox, the free peer to peer instant messenger.
  *
- *   This file is part of Tox.
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- *   Tox is free software: you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation, either version 3 of the License, or
- *   (at your option) any later version.
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *   Tox is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with Tox. If not, see <http://www.gnu.org/licenses/>.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
@@ -33,6 +31,7 @@
 #include "../toxcore/util.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -705,12 +704,12 @@ bool toxav_audio_send_frame(ToxAV *av, uint32_t friend_number, const int16_t *pc
             goto END;
         }
 
-        DYNAMIC( uint8_t, dest, sample_count + sizeof(sampling_rate) ); // -C99
+        VLA(uint8_t, dest, sample_count + sizeof(sampling_rate)); /* This is more than enough always */
 
-        sampling_rate = htonl(sampling_rate);
+        sampling_rate = net_htonl(sampling_rate);
         memcpy(dest, &sampling_rate, sizeof(sampling_rate));
         int vrc = opus_encode(call->audio.second->encoder, pcm, sample_count,
-                              dest + sizeof(sampling_rate), sizeOf(dest) - sizeof(sampling_rate));
+                              dest + sizeof(sampling_rate), SIZEOF_VLA(dest) - sizeof(sampling_rate));
 
         if (vrc < 0) {
             LOGGER_WARNING(av->m->log, "Failed to encode frame %s", opus_strerror(vrc));

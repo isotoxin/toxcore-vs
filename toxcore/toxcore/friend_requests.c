@@ -1,26 +1,26 @@
-/* friend_requests.c
- *
+/*
  * Handle friend requests.
- *
- *  Copyright (C) 2013 Tox project All Rights Reserved.
- *
- *  This file is part of Tox.
- *
- *  Tox is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  Tox is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
- *
  */
 
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2013 Tox project.
+ *
+ * This file is part of Tox, the free peer to peer instant messenger.
+ *
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -138,9 +138,9 @@ static int friendreq_handlepacket(void *object, const uint8_t *source_pubkey, co
     addto_receivedlist(fr, source_pubkey);
 
     uint32_t message_len = length - sizeof(fr->nospam);
-    DYNAMIC( uint8_t, message, message_len + 1 ); // -C99
+    VLA(uint8_t, message, message_len + 1);
     memcpy(message, packet + sizeof(fr->nospam), message_len);
-    message[sizeOf(message) - 1] = 0; /* Be sure the message is null terminated. */
+    message[SIZEOF_VLA(message) - 1] = 0; /* Be sure the message is null terminated. */
 
     (*fr->handle_friendrequest)(fr->handle_friendrequest_object, source_pubkey, message, message_len, userdata);
     return 0;

@@ -1,35 +1,34 @@
-/* net_crypto.c
- *
+/*
  * Functions for the core crypto.
  *
  * NOTE: This code has to be perfect. We don't mess around with encryption.
- *
- *  Copyright (C) 2013 Tox project All Rights Reserved.
- *
- *  This file is part of Tox.
- *
- *  Tox is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  Tox is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
- *
  */
 
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2013 Tox project.
+ *
+ * This file is part of Tox, the free peer to peer instant messenger.
+ *
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
+#include "ccompat.h"
 #include "crypto_core.h"
-
-#include "network.h"
 
 #include <string.h>
 
@@ -127,8 +126,8 @@ int32_t encrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, 
         return -1;
     }
 
-    DYNAMIC( uint8_t, temp_plain, length + crypto_box_ZEROBYTES ); // -C99
-    DYNAMIC( uint8_t, temp_encrypted, length + crypto_box_MACBYTES + crypto_box_BOXZEROBYTES ); // -C99
+    VLA(uint8_t, temp_plain, length + crypto_box_ZEROBYTES);
+    VLA(uint8_t, temp_encrypted, length + crypto_box_MACBYTES + crypto_box_BOXZEROBYTES);
 
     memset(temp_plain, 0, crypto_box_ZEROBYTES);
     memcpy(temp_plain + crypto_box_ZEROBYTES, plain, length); // Pad the message with 32 0 bytes.
@@ -149,8 +148,8 @@ int32_t decrypt_data_symmetric(const uint8_t *secret_key, const uint8_t *nonce, 
         return -1;
     }
 
-    DYNAMIC( uint8_t, temp_plain, length + crypto_box_ZEROBYTES ); // -C99
-    DYNAMIC( uint8_t, temp_encrypted, length + crypto_box_BOXZEROBYTES ); // -C99
+    VLA(uint8_t, temp_plain, length + crypto_box_ZEROBYTES);
+    VLA(uint8_t, temp_encrypted, length + crypto_box_BOXZEROBYTES);
 
     memset(temp_encrypted, 0, crypto_box_BOXZEROBYTES);
     memcpy(temp_encrypted + crypto_box_BOXZEROBYTES, encrypted, length); // Pad the message with 16 0 bytes.
@@ -210,6 +209,20 @@ void increment_nonce(uint8_t *nonce)
         carry >>= 8;
     }
 }
+
+static uint32_t host_to_network(uint32_t x)
+{
+#if BYTE_ORDER == LITTLE_ENDIAN
+    return
+        ((x >> 24) & 0x000000FF) | // move byte 3 to byte 0
+        ((x >> 8)  & 0x0000FF00) | // move byte 2 to byte 1
+        ((x << 8)  & 0x00FF0000) | // move byte 1 to byte 2
+        ((x << 24) & 0xFF000000);  // move byte 0 to byte 3
+#else
+    return x;
+#endif
+}
+
 /* increment the given nonce by num */
 void increment_nonce_number(uint8_t *nonce, uint32_t host_order_num)
 {
@@ -218,7 +231,7 @@ void increment_nonce_number(uint8_t *nonce, uint32_t host_order_num)
      * that loop bounds and their potential underflow or overflow
      * are independent of user-controlled input (you may have heard of the Heartbleed bug).
      */
-    const uint32_t big_endian_num = htonl(host_order_num);
+    const uint32_t big_endian_num = host_to_network(host_order_num);
     const uint8_t *const num_vec = (const uint8_t *) &big_endian_num;
     uint8_t num_as_nonce[crypto_box_NONCEBYTES] = {0};
     num_as_nonce[crypto_box_NONCEBYTES - 4] = num_vec[0];

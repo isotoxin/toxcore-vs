@@ -1,31 +1,31 @@
-/* tox.c
- *
+/*
  * The Tox public API.
- *
- *  Copyright (C) 2013 Tox project All Rights Reserved.
- *
- *  This file is part of Tox.
- *
- *  Tox is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  Tox is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
- *
  */
 
-#define _XOPEN_SOURCE 600
-
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2013 Tox project.
+ *
+ * This file is part of Tox, the free peer to peer instant messenger.
+ *
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+
+#define _XOPEN_SOURCE 600
 
 #define TOX_DEFINED
 typedef struct Messenger Tox;
@@ -164,7 +164,7 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
                 return NULL;
             }
 
-            m_options.proxy_info.ip_port.port = htons(tox_options_get_proxy_port(options));
+            m_options.proxy_info.ip_port.port = net_htons(tox_options_get_proxy_port(options));
         }
     }
 
@@ -235,41 +235,26 @@ bool tox_bootstrap(Tox *tox, const char *address, uint16_t port, const uint8_t *
         return 0;
     }
 
-    struct addrinfo *root, *info;
+    IP_Port *root;
 
-    if (getaddrinfo(address, NULL, NULL, &root) != 0) {
+    int32_t count = net_getipport(address, &root, SOCK_DGRAM);
+
+    if (count == -1) {
         SET_ERROR_PARAMETER(error, TOX_ERR_BOOTSTRAP_BAD_HOST);
         return 0;
     }
 
-    info = root;
+    unsigned int i;
 
-    unsigned int count = 0;
-
-    do {
-        IP_Port ip_port;
-        ip_port.port = htons(port);
-        ip_port.ip.family = info->ai_family;
-
-        if (info->ai_socktype && info->ai_socktype != SOCK_DGRAM) {
-            continue;
-        }
-
-        if (info->ai_family == AF_INET) {
-            ip_port.ip.ip4.in_addr = ((struct sockaddr_in *)info->ai_addr)->sin_addr;
-        } else if (info->ai_family == AF_INET6) {
-            ip_port.ip.ip6.in6_addr = ((struct sockaddr_in6 *)info->ai_addr)->sin6_addr;
-        } else {
-            continue;
-        }
+    for (i = 0; i < count; i++) {
+        root[i].port = htons(port);
 
         Messenger *m = tox;
-        onion_add_bs_path_node(m->onion_c, ip_port, public_key);
-        DHT_bootstrap(m->dht, ip_port, public_key);
-        ++count;
-    } while ((info = info->ai_next));
+        onion_add_bs_path_node(m->onion_c, root[i], public_key);
+        DHT_bootstrap(m->dht, root[i], public_key);
+    }
 
-    freeaddrinfo(root);
+    net_freeipport(root);
 
     if (count) {
         SET_ERROR_PARAMETER(error, TOX_ERR_BOOTSTRAP_OK);
@@ -293,40 +278,25 @@ bool tox_add_tcp_relay(Tox *tox, const char *address, uint16_t port, const uint8
         return 0;
     }
 
-    struct addrinfo *root, *info;
+    IP_Port *root;
 
-    if (getaddrinfo(address, NULL, NULL, &root) != 0) {
+    int32_t count = net_getipport(address, &root, SOCK_STREAM);
+
+    if (count == -1) {
         SET_ERROR_PARAMETER(error, TOX_ERR_BOOTSTRAP_BAD_HOST);
         return 0;
     }
 
-    info = root;
+    unsigned int i;
 
-    unsigned int count = 0;
-
-    do {
-        IP_Port ip_port;
-        ip_port.port = htons(port);
-        ip_port.ip.family = info->ai_family;
-
-        if (info->ai_socktype && info->ai_socktype != SOCK_STREAM) {
-            continue;
-        }
-
-        if (info->ai_family == AF_INET) {
-            ip_port.ip.ip4.in_addr = ((struct sockaddr_in *)info->ai_addr)->sin_addr;
-        } else if (info->ai_family == AF_INET6) {
-            ip_port.ip.ip6.in6_addr = ((struct sockaddr_in6 *)info->ai_addr)->sin6_addr;
-        } else {
-            continue;
-        }
+    for (i = 0; i < count; i++) {
+        root[i].port = htons(port);
 
         Messenger *m = tox;
-        add_tcp_relay(m->net_crypto, ip_port, public_key);
-        ++count;
-    } while ((info = info->ai_next));
+        add_tcp_relay(m->net_crypto, root[i], public_key);
+    }
 
-    freeaddrinfo(root);
+    net_freeipport(root);
 
     if (count) {
         SET_ERROR_PARAMETER(error, TOX_ERR_BOOTSTRAP_OK);
@@ -385,13 +355,13 @@ void tox_self_get_address(const Tox *tox, uint8_t *address)
 void tox_self_set_nospam(Tox *tox, uint32_t nospam)
 {
     Messenger *m = tox;
-    set_nospam(&(m->fr), htonl(nospam));
+    set_nospam(&(m->fr), net_htonl(nospam));
 }
 
 uint32_t tox_self_get_nospam(const Tox *tox)
 {
     const Messenger *m = tox;
-    return ntohl(get_nospam(&(m->fr)));
+    return net_ntohl(get_nospam(&(m->fr)));
 }
 
 void tox_self_get_public_key(const Tox *tox, uint8_t *public_key)
@@ -1634,14 +1604,14 @@ void tox_self_get_dht_id(const Tox *tox, uint8_t *dht_id)
 {
     if (dht_id) {
         const Messenger *m = tox;
-        memcpy(dht_id , m->dht->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
+        memcpy(dht_id, m->dht->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
     }
 }
 
 uint16_t tox_self_get_udp_port(const Tox *tox, TOX_ERR_GET_PORT *error)
 {
     const Messenger *m = tox;
-    uint16_t port = htons(m->net->port);
+    uint16_t port = net_htons(m->net->port);
 
     if (port) {
         SET_ERROR_PARAMETER(error, TOX_ERR_GET_PORT_OK);

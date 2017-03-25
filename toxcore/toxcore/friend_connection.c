@@ -1,26 +1,26 @@
-/* friend_connection.c
- *
+/*
  * Connection to friends.
- *
- *  Copyright (C) 2014 Tox project All Rights Reserved.
- *
- *  This file is part of Tox.
- *
- *  Tox is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  Tox is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
- *
  */
 
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2014 Tox project.
+ *
+ * This file is part of Tox, the free peer to peer instant messenger.
+ *
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -791,17 +791,17 @@ int send_friend_request_packet(Friend_Connections *fr_c, int friendcon_id, uint3
         return -1;
     }
 
-    DYNAMIC( uint8_t, packet, 1 + sizeof(nospam_num) + length ); // -C99
+    VLA(uint8_t, packet, 1 + sizeof(nospam_num) + length);
     memcpy(packet + 1, &nospam_num, sizeof(nospam_num));
     memcpy(packet + 1 + sizeof(nospam_num), data, length);
 
     if (friend_con->status == FRIENDCONN_STATUS_CONNECTED) {
         packet[0] = PACKET_ID_FRIEND_REQUESTS;
-        return write_cryptpacket(fr_c->net_crypto, friend_con->crypt_connection_id, packet, sizeOf(packet), 0) != -1;
+        return write_cryptpacket(fr_c->net_crypto, friend_con->crypt_connection_id, packet, SIZEOF_VLA(packet), 0) != -1;
     }
 
     packet[0] = CRYPTO_PACKET_FRIEND_REQ;
-    int num = send_onion_data(fr_c->onion_c, friend_con->onion_friendnum, packet, sizeOf(packet));
+    int num = send_onion_data(fr_c->onion_c, friend_con->onion_friendnum, packet, SIZEOF_VLA(packet));
 
     if (num <= 0) {
         return -1;
@@ -841,7 +841,7 @@ Friend_Connections *new_friend_connections(Onion_Client *onion_c, bool local_dis
 static void LANdiscovery(Friend_Connections *fr_c)
 {
     if (fr_c->last_LANdiscovery + LAN_DISCOVERY_INTERVAL < unix_time()) {
-        send_LANdiscovery(htons(TOX_PORT_DEFAULT), fr_c->dht);
+        send_LANdiscovery(net_htons(TOX_PORT_DEFAULT), fr_c->dht);
         fr_c->last_LANdiscovery = unix_time();
     }
 }

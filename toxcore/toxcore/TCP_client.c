@@ -1,25 +1,26 @@
 /*
-* TCP_client.c -- Implementation of the TCP relay client part of Tox.
-*
-*  Copyright (C) 2014 Tox project All Rights Reserved.
-*
-*  This file is part of Tox.
-*
-*  Tox is free software: you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation, either version 3 of the License, or
-*  (at your option) any later version.
-*
-*  Tox is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
-*
-*/
+ * Implementation of the TCP relay client part of Tox.
+ */
 
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2014 Tox project.
+ *
+ * This file is part of Tox, the free peer to peer instant messenger.
+ *
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -35,36 +36,14 @@
 /* return 1 on success
  * return 0 on failure
  */
-static int connect_sock_to(sock_t sock, IP_Port ip_port, TCP_Proxy_Info *proxy_info)
+static int connect_sock_to(Socket sock, IP_Port ip_port, TCP_Proxy_Info *proxy_info)
 {
     if (proxy_info->proxy_type != TCP_PROXY_NONE) {
         ip_port = proxy_info->ip_port;
     }
 
-    struct sockaddr_storage addr = {0};
-
-    size_t addrsize;
-
-    if (ip_port.ip.family == AF_INET) {
-        struct sockaddr_in *addr4 = (struct sockaddr_in *)&addr;
-
-        addrsize = sizeof(struct sockaddr_in);
-        addr4->sin_family = AF_INET;
-        addr4->sin_addr = ip_port.ip.ip4.in_addr;
-        addr4->sin_port = ip_port.port;
-    } else if (ip_port.ip.family == AF_INET6) {
-        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)&addr;
-
-        addrsize = sizeof(struct sockaddr_in6);
-        addr6->sin6_family = AF_INET6;
-        addr6->sin6_addr = ip_port.ip.ip6.in6_addr;
-        addr6->sin6_port = ip_port.port;
-    } else {
-        return 0;
-    }
-
     /* nonblocking socket, connect will never return success */
-    connect(sock, (struct sockaddr *)&addr, addrsize);
+    net_connect(sock, ip_port);
     return 1;
 }
 
@@ -83,7 +62,7 @@ static int proxy_http_generate_connection_request(TCP_Client_Connection *TCP_con
         return 0;
     }
 
-    const uint16_t port = ntohs(TCP_conn->ip_port.port);
+    const uint16_t port = net_ntohs(TCP_conn->ip_port.port);
     const int written = snprintf((char *)TCP_conn->last_packet, MAX_PACKET_SIZE, "%s%s:%hu%s%s:%hu%s", one, ip, port, two,
                                  ip, port, three);
 
@@ -119,7 +98,7 @@ static int proxy_http_read_connection_response(TCP_Client_Connection *TCP_conn)
         unsigned int data_left = TCP_socket_data_recv_buffer(TCP_conn->sock);
 
         if (data_left) {
-            DYNAMIC( uint8_t, temp_data, data_left ); // -C99
+            VLA(uint8_t, temp_data, data_left);
             read_TCP_packet(TCP_conn->sock, temp_data, data_left);
         }
 
@@ -386,18 +365,18 @@ static int write_packet_TCP_secure_connection(TCP_Client_Connection *con, const 
         }
     }
 
-    DYNAMIC( uint8_t, packet, sizeof(uint16_t) + length + CRYPTO_MAC_SIZE ); // -C99
+    VLA(uint8_t, packet, sizeof(uint16_t) + length + CRYPTO_MAC_SIZE);
 
-    uint16_t c_length = htons(length + CRYPTO_MAC_SIZE);
+    uint16_t c_length = net_htons(length + CRYPTO_MAC_SIZE);
     memcpy(packet, &c_length, sizeof(uint16_t));
     int len = encrypt_data_symmetric(con->shared_key, con->sent_nonce, data, length, packet + sizeof(uint16_t));
 
-    if ((unsigned int)len != (sizeOf(packet) - sizeof(uint16_t))) {
+    if ((unsigned int)len != (SIZEOF_VLA(packet) - sizeof(uint16_t))) {
         return -1;
     }
 
     if (priority) {
-        len = sendpriority ? send(con->sock, (const char *)packet, sizeOf(packet), MSG_NOSIGNAL) : 0;
+        len = sendpriority ? send(con->sock, (const char *)packet, SIZEOF_VLA(packet), MSG_NOSIGNAL) : 0;
 
         if (len <= 0) {
             len = 0;
@@ -405,14 +384,14 @@ static int write_packet_TCP_secure_connection(TCP_Client_Connection *con, const 
 
         increment_nonce(con->sent_nonce);
 
-        if ((unsigned int)len == sizeOf(packet)) {
+        if ((unsigned int)len == SIZEOF_VLA(packet)) {
             return 1;
         }
 
-        return add_priority(con, packet, sizeOf(packet), len);
+        return add_priority(con, packet, SIZEOF_VLA(packet), len);
     }
 
-    len = send(con->sock, (const char *)packet, sizeOf(packet), MSG_NOSIGNAL);
+    len = send(con->sock, (const char *)packet, SIZEOF_VLA(packet), MSG_NOSIGNAL);
 
     if (len <= 0) {
         return 0;
@@ -420,12 +399,12 @@ static int write_packet_TCP_secure_connection(TCP_Client_Connection *con, const 
 
     increment_nonce(con->sent_nonce);
 
-    if ((unsigned int)len == sizeOf(packet)) {
+    if ((unsigned int)len == SIZEOF_VLA(packet)) {
         return 1;
     }
 
-    memcpy(con->last_packet, packet, sizeOf(packet));
-    con->last_packet_length = sizeOf(packet);
+    memcpy(con->last_packet, packet, SIZEOF_VLA(packet));
+    con->last_packet_length = SIZEOF_VLA(packet);
     con->last_packet_sent = len;
     return 1;
 }
@@ -477,10 +456,10 @@ int send_data(TCP_Client_Connection *con, uint8_t con_id, const uint8_t *data, u
         return 0;
     }
 
-    DYNAMIC( uint8_t, packet, 1 + length ); // -C99
+    VLA(uint8_t, packet, 1 + length);
     packet[0] = con_id + NUM_RESERVED_PORTS;
     memcpy(packet + 1, data, length);
-    return write_packet_TCP_secure_connection(con, packet, sizeOf(packet), 0);
+    return write_packet_TCP_secure_connection(con, packet, SIZEOF_VLA(packet), 0);
 }
 
 /* return 1 on success.
@@ -493,11 +472,11 @@ int send_oob_packet(TCP_Client_Connection *con, const uint8_t *public_key, const
         return -1;
     }
 
-    DYNAMIC( uint8_t, packet, 1 + CRYPTO_PUBLIC_KEY_SIZE + length ); // -C99
+    VLA(uint8_t, packet, 1 + CRYPTO_PUBLIC_KEY_SIZE + length);
     packet[0] = TCP_PACKET_OOB_SEND;
     memcpy(packet + 1, public_key, CRYPTO_PUBLIC_KEY_SIZE);
     memcpy(packet + 1 + CRYPTO_PUBLIC_KEY_SIZE, data, length);
-    return write_packet_TCP_secure_connection(con, packet, sizeOf(packet), 0);
+    return write_packet_TCP_secure_connection(con, packet, SIZEOF_VLA(packet), 0);
 }
 
 
@@ -613,10 +592,10 @@ int send_disconnect_request(TCP_Client_Connection *con, uint8_t con_id)
  */
 int send_onion_request(TCP_Client_Connection *con, const uint8_t *data, uint16_t length)
 {
-    DYNAMIC( uint8_t, packet, 1 + length ); // -C99
+    VLA(uint8_t, packet, 1 + length);
     packet[0] = TCP_PACKET_ONION_REQUEST;
     memcpy(packet + 1, data, length);
-    return write_packet_TCP_secure_connection(con, packet, sizeOf(packet), 0);
+    return write_packet_TCP_secure_connection(con, packet, SIZEOF_VLA(packet), 0);
 }
 
 void onion_response_handler(TCP_Client_Connection *con, int (*onion_callback)(void *object, const uint8_t *data,
@@ -652,7 +631,7 @@ TCP_Client_Connection *new_TCP_connection(IP_Port ip_port, const uint8_t *public
         family = proxy_info->ip_port.ip.family;
     }
 
-    sock_t sock = socket(family, SOCK_STREAM, IPPROTO_TCP);
+    Socket sock = net_socket(family, TOX_SOCK_STREAM, TOX_PROTO_TCP);
 
     if (!sock_valid(sock)) {
         return NULL;

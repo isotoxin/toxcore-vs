@@ -1,26 +1,26 @@
 /*
-* TCP_client.h -- Implementation of the TCP relay client part of Tox.
-*
-*  Copyright (C) 2014 Tox project All Rights Reserved.
-*
-*  This file is part of Tox.
-*
-*  Tox is free software: you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation, either version 3 of the License, or
-*  (at your option) any later version.
-*
-*  Tox is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
-*
-*/
+ * Implementation of the TCP relay client part of Tox.
+ */
 
-
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2014 Tox project.
+ *
+ * This file is part of Tox, the free peer to peer instant messenger.
+ *
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifndef TCP_CLIENT_H
 #define TCP_CLIENT_H
 
@@ -52,7 +52,7 @@ enum {
 };
 typedef struct  {
     uint8_t status;
-    sock_t  sock;
+    Socket sock;
     uint8_t self_public_key[CRYPTO_PUBLIC_KEY_SIZE]; /* our public key */
     uint8_t public_key[CRYPTO_PUBLIC_KEY_SIZE]; /* public key of the server */
     IP_Port ip_port; /* The ip and port of the server */

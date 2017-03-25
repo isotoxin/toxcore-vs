@@ -1,26 +1,26 @@
-/*  LAN_discovery.c
- *
- *  LAN discovery implementation.
- *
- *  Copyright (C) 2013 Tox project All Rights Reserved.
- *
- *  This file is part of Tox.
- *
- *  Tox is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  Tox is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
- *
+/*
+ * LAN discovery implementation.
  */
 
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2013 Tox project.
+ *
+ * This file is part of Tox, the free peer to peer instant messenger.
+ *
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -39,8 +39,10 @@
 #define MAX_INTERFACES 16
 
 
+/* TODO: multiple threads might concurrently try to set these, and it isn't clear that this couldn't lead to undesirable
+ * behaviour. Consider storing the data in per-instance variables instead. */
 static int     broadcast_count = -1;
-static IP_Port broadcast_ip_port[MAX_INTERFACES];
+static IP_Port broadcast_ip_ports[MAX_INTERFACES];
 
 #if defined(_WIN32) || defined(__WIN32__) || defined (WIN32)
 
@@ -48,8 +50,6 @@ static IP_Port broadcast_ip_port[MAX_INTERFACES];
 
 static void fetch_broadcast_info(uint16_t port)
 {
-    broadcast_count = 0;
-
     IP_ADAPTER_INFO *pAdapterInfo = (IP_ADAPTER_INFO *)malloc(sizeof(IP_ADAPTER_INFO));
     unsigned long ulOutBufLen = sizeof(IP_ADAPTER_INFO);
 
@@ -66,6 +66,13 @@ static void fetch_broadcast_info(uint16_t port)
         }
     }
 
+    /* We copy these to the static variables broadcast_* only at the end of fetch_broadcast_info().
+     * The intention is to ensure that even if multiple threads enter fetch_broadcast_info() concurrently, only valid
+     * interfaces will be set to be broadcast to.
+     * */
+    int count = 0;
+    IP_Port ip_ports[MAX_INTERFACES];
+
     int ret;
 
     if ((ret = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) == NO_ERROR) {
@@ -77,16 +84,16 @@ static void fetch_broadcast_info(uint16_t port)
             if (addr_parse_ip(pAdapter->IpAddressList.IpMask.String, &subnet_mask)
                     && addr_parse_ip(pAdapter->GatewayList.IpAddress.String, &gateway)) {
                 if (gateway.family == AF_INET && subnet_mask.family == AF_INET) {
-                    IP_Port *ip_port = &broadcast_ip_port[broadcast_count];
+                    IP_Port *ip_port = &ip_ports[count];
                     ip_port->ip.family = AF_INET;
-                    uint32_t gateway_ip = ntohl(gateway.ip4.uint32), subnet_ip = ntohl(subnet_mask.ip4.uint32);
+                    uint32_t gateway_ip = net_ntohl(gateway.ip4.uint32), subnet_ip = net_ntohl(subnet_mask.ip4.uint32);
                     uint32_t broadcast_ip = gateway_ip + ~subnet_ip - 1;
-                    ip_port->ip.ip4.uint32 = htonl(broadcast_ip);
+                    ip_port->ip.ip4.uint32 = net_htonl(broadcast_ip);
                     ip_port->port = port;
-                    broadcast_count++;
+                    count++;
 
-                    if (broadcast_count >= MAX_INTERFACES) {
-                        return;
+                    if (count >= MAX_INTERFACES) {
+                        break;
                     }
                 }
             }
@@ -97,6 +104,12 @@ static void fetch_broadcast_info(uint16_t port)
 
     if (pAdapterInfo) {
         free(pAdapterInfo);
+    }
+
+    broadcast_count = count;
+
+    for (uint32_t i = 0; i < count; i++) {
+        broadcast_ip_ports[i] = ip_ports[i];
     }
 }
 
@@ -109,9 +122,9 @@ static void fetch_broadcast_info(uint16_t port)
      * Definitely won't work like this on Windows...
      */
     broadcast_count = 0;
-    sock_t sock = 0;
+    Socket sock = 0;
 
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((sock = net_socket(TOX_AF_INET, TOX_SOCK_STREAM, 0)) < 0) {
         return;
     }
 
@@ -128,14 +141,21 @@ static void fetch_broadcast_info(uint16_t port)
         return;
     }
 
+    /* We copy these to the static variables broadcast_* only at the end of fetch_broadcast_info().
+     * The intention is to ensure that even if multiple threads enter fetch_broadcast_info() concurrently, only valid
+     * interfaces will be set to be broadcast to.
+     * */
+    int count = 0;
+    IP_Port ip_ports[MAX_INTERFACES];
+
     /* ifconf.ifc_len is set by the ioctl() to the actual length used;
      * on usage of the complete array the call should be repeated with
      * a larger array, not done (640kB and 16 interfaces shall be
      * enough, for everybody!)
      */
-    int i, count = ifconf.ifc_len / sizeof(struct ifreq);
+    int i, n = ifconf.ifc_len / sizeof(struct ifreq);
 
-    for (i = 0; i < count; i++) {
+    for (i = 0; i < n; i++) {
         /* there are interfaces with are incapable of broadcast */
         if (ioctl(sock, SIOCGIFBRDADDR, &i_faces[i]) < 0) {
             continue;
@@ -148,24 +168,29 @@ static void fetch_broadcast_info(uint16_t port)
 
         struct sockaddr_in *sock4 = (struct sockaddr_in *)&i_faces[i].ifr_broadaddr;
 
-        if (broadcast_count >= MAX_INTERFACES) {
-            close(sock);
-            return;
+        if (count >= MAX_INTERFACES) {
+            break;
         }
 
-        IP_Port *ip_port = &broadcast_ip_port[broadcast_count];
+        IP_Port *ip_port = &ip_ports[count];
         ip_port->ip.family = AF_INET;
-        ip_port->ip.ip4.in_addr = sock4->sin_addr;
+        ip_port->ip.ip4.uint32 = sock4->sin_addr.s_addr;
 
         if (ip_port->ip.ip4.uint32 == 0) {
             continue;
         }
 
         ip_port->port = port;
-        broadcast_count++;
+        count++;
     }
 
     close(sock);
+
+    broadcast_count = count;
+
+    for (uint32_t i = 0; i < count; i++) {
+        broadcast_ip_ports[i] = ip_ports[i];
+    }
 }
 
 #else // TODO(irungentoo): Other platforms?
@@ -196,14 +221,14 @@ static uint32_t send_broadcasts(Networking_Core *net, uint16_t port, const uint8
     int i;
 
     for (i = 0; i < broadcast_count; i++) {
-        sendpacket(net, broadcast_ip_port[i], data, length);
+        sendpacket(net, broadcast_ip_ports[i], data, length);
     }
 
     return 1;
 }
 
 /* Return the broadcast ip. */
-static IP broadcast_ip(sa_family_t family_socket, sa_family_t family_broadcast)
+static IP broadcast_ip(Family family_socket, Family family_broadcast)
 {
     IP ip;
     ip_reset(&ip);
@@ -221,7 +246,7 @@ static IP broadcast_ip(sa_family_t family_socket, sa_family_t family_broadcast)
             ip.family = AF_INET6;
             ip.ip6.uint32[0] = 0;
             ip.ip6.uint32[1] = 0;
-            ip.ip6.uint32[2] = htonl(0xFFFF);
+            ip.ip6.uint32[2] = net_htonl(0xFFFF);
             ip.ip6.uint32[3] = INADDR_BROADCAST;
         }
     } else if (family_socket == AF_INET) {
@@ -254,7 +279,7 @@ bool Local_ip(IP ip)
         }
 
         /* localhost in IPv6 (::1) */
-        if (ip.ip6.uint64[0] == 0 && ip.ip6.uint32[2] == 0 && ip.ip6.uint32[3] == htonl(1)) {
+        if (ip.ip6.uint64[0] == 0 && ip.ip6.uint32[2] == 0 && ip.ip6.uint32[3] == net_htonl(1)) {
             return 1;
         }
     }
