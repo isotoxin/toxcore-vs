@@ -37,6 +37,10 @@
 /* This cannot be bigger than 256 */
 #define MAX_CONCURRENT_FILE_PIPES 256
 
+#if !defined(__SPLINT__) && MAX_CONCURRENT_FILE_PIPES > UINT8_MAX + 1
+#error "uint8_t cannot represent all file transfer numbers"
+#endif
+
 
 #define FRIEND_ADDRESS_SIZE (CRYPTO_PUBLIC_KEY_SIZE + sizeof(uint32_t) + sizeof(uint16_t))
 
@@ -71,13 +75,13 @@ enum {
 
 typedef struct {
     const char *client_caps;
-    uint8_t ipv6enabled;
-    uint8_t udp_disabled;
+    bool ipv6enabled;
+    bool udp_disabled;
     TCP_Proxy_Info proxy_info;
     uint16_t port_range[2];
     uint16_t tcp_server_port;
 
-    uint8_t hole_punching_enabled;
+    bool hole_punching_enabled;
     bool local_discovery_enabled;
 
     logger_cb *log_callback;
@@ -204,7 +208,7 @@ typedef struct {
     uint64_t last_seen_time;
     uint8_t last_connection_udp_tcp;
     struct File_Transfers file_sending[MAX_CONCURRENT_FILE_PIPES];
-    unsigned int num_sending_files;
+    uint32_t num_sending_files;
     struct File_Transfers file_receiving[MAX_CONCURRENT_FILE_PIPES];
 
     struct {
@@ -230,7 +234,7 @@ struct Messenger {
     Friend_Connections *fr_c;
 
     TCP_Server *tcp_server;
-    Friend_Requests fr;
+    Friend_Requests *fr;
     uint8_t name[MAX_NAME_LENGTH];
     uint16_t name_length;
 
@@ -707,7 +711,7 @@ void custom_lossy_packet_registerhandler(Messenger *m, void (*packet_handler_cal
  * return -5 if packet failed to send because of other error.
  * return 0 on success.
  */
-int send_custom_lossy_packet(const Messenger *m, int32_t friendnumber, const uint8_t *data, uint32_t length);
+int m_send_custom_lossy_packet(const Messenger *m, int32_t friendnumber, const uint8_t *data, uint32_t length);
 
 
 /* Set handlers for custom lossless packets.
@@ -726,7 +730,7 @@ void custom_lossless_packet_registerhandler(Messenger *m, void (*packet_handler_
  * return 0 on success.
  */
 int send_custom_lossless_packet2( const Messenger *m, int32_t friendnumber, const uint8_t *data1, uint32_t length1, const uint8_t *data2, uint32_t length2 );
-inline int send_custom_lossless_packet( const Messenger *m, int32_t friendnumber, const uint8_t *data, uint32_t length )
+inline int send_custom_lossless_packet(const Messenger *m, int32_t friendnumber, const uint8_t *data, uint32_t length)
 {
     return send_custom_lossless_packet2(m, friendnumber, data, length, 0, 0);
 }

@@ -172,7 +172,7 @@ uint32_t tox_version_major(void);
  * breaking the API or ABI. Set to 0 when the major version number is
  * incremented.
  */
-#define TOX_VERSION_MINOR              1
+#define TOX_VERSION_MINOR              2
 
 uint32_t tox_version_minor(void);
 
@@ -180,7 +180,7 @@ uint32_t tox_version_minor(void);
  * The patch or revision number. Incremented when bugfixes are applied without
  * changing any functionality or API or ABI.
  */
-#define TOX_VERSION_PATCH              5
+#define TOX_VERSION_PATCH              0
 
 uint32_t tox_version_patch(void);
 
@@ -191,19 +191,19 @@ uint32_t tox_version_patch(void);
  * features, but can't break the API.
  */
 #define TOX_VERSION_IS_API_COMPATIBLE(MAJOR, MINOR, PATCH)              \
-  (TOX_VERSION_MAJOR > 0 && TOX_VERSION_MAJOR == MAJOR) && (            \
+  ((TOX_VERSION_MAJOR > 0 && TOX_VERSION_MAJOR == MAJOR) && (           \
     /* 1.x.x, 2.x.x, etc. with matching major version. */               \
     TOX_VERSION_MINOR > MINOR ||                                        \
-    TOX_VERSION_MINOR == MINOR && TOX_VERSION_PATCH >= PATCH            \
-  ) || (TOX_VERSION_MAJOR == 0 && MAJOR == 0) && (                      \
+    (TOX_VERSION_MINOR == MINOR && TOX_VERSION_PATCH >= PATCH)          \
+  )) || ((TOX_VERSION_MAJOR == 0 && MAJOR == 0) && (                    \
     /* 0.x.x makes minor behave like major above. */                    \
-    (TOX_VERSION_MINOR > 0 && TOX_VERSION_MINOR == MINOR) && (          \
+    ((TOX_VERSION_MINOR > 0 && TOX_VERSION_MINOR == MINOR) && (         \
       TOX_VERSION_PATCH >= PATCH                                        \
-    ) || (TOX_VERSION_MINOR == 0 && MINOR == 0) && (                    \
+    )) || ((TOX_VERSION_MINOR == 0 && MINOR == 0) && (                  \
       /* 0.0.x and 0.0.y are only compatible if x == y. */              \
       TOX_VERSION_PATCH == PATCH                                        \
-    )                                                                   \
-  )
+    ))                                                                  \
+  ))
 
 /**
  * Return whether the compiled library version is compatible with the passed
@@ -257,6 +257,13 @@ uint32_t tox_secret_key_size(void);
 uint32_t tox_conference_uid_size(void);
 
 /**
+ * The size of the nospam in bytes when written in a Tox address.
+ */
+#define TOX_NOSPAM_SIZE                (sizeof(uint32_t))
+
+uint32_t tox_nospam_size(void);
+
+/**
  * The size of a Tox address in bytes. Tox addresses are in the format
  * [Public Key (TOX_PUBLIC_KEY_SIZE bytes)][nospam (4 bytes)][checksum (2 bytes)].
  *
@@ -264,12 +271,14 @@ uint32_t tox_conference_uid_size(void);
  * byte is an XOR of all the even bytes (0, 2, 4, ...), the second byte is an
  * XOR of all the odd bytes (1, 3, 5, ...) of the Public Key and nospam.
  */
-#define TOX_ADDRESS_SIZE               (TOX_PUBLIC_KEY_SIZE + sizeof(uint32_t) + sizeof(uint16_t))
+#define TOX_ADDRESS_SIZE               (TOX_PUBLIC_KEY_SIZE + TOX_NOSPAM_SIZE + sizeof(uint16_t))
 
 uint32_t tox_address_size(void);
 
 /**
  * Maximum length of a nickname in bytes.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
 #define TOX_MAX_NAME_LENGTH            128
 
@@ -277,6 +286,8 @@ uint32_t tox_max_name_length(void);
 
 /**
  * Maximum length of a status message in bytes.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
 #define TOX_MAX_STATUS_MESSAGE_LENGTH  1007
 
@@ -284,6 +295,8 @@ uint32_t tox_max_status_message_length(void);
 
 /**
  * Maximum length of a friend request message in bytes.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
 #define TOX_MAX_FRIEND_REQUEST_LENGTH  1016
 
@@ -291,6 +304,8 @@ uint32_t tox_max_friend_request_length(void);
 
 /**
  * Maximum length of a single message after which it should be split.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
 #define TOX_MAX_MESSAGE_LENGTH         1372
 
@@ -298,6 +313,8 @@ uint32_t tox_max_message_length(void);
 
 /**
  * Maximum size of custom packets. TODO(iphydf): should be LENGTH?
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
 #define TOX_MAX_CUSTOM_PACKET_SIZE     1373
 
@@ -319,6 +336,8 @@ uint32_t tox_file_id_length(void);
 
 /**
  * Maximum file name length for file transfers.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
 #define TOX_MAX_FILENAME_LENGTH        255
 
@@ -498,7 +517,7 @@ typedef void tox_log_cb(Tox *tox, TOX_LOG_LEVEL level, const char *file, uint32_
  * @deprecated The memory layout of this struct (size, alignment, and field
  * order) is not part of the ABI. To remain compatible, prefer to use tox_options_new to
  * allocate the object and accessor functions to set the members. The struct
- * will become opaque (i.e. the definition will become private) in v0.2.0.
+ * will become opaque (i.e. the definition will become private) in v0.3.0.
  */
 struct Tox_Options {
 
@@ -975,6 +994,9 @@ typedef enum TOX_CONNECTION {
 /**
  * Return whether we are connected to the DHT. The return value is equal to the
  * last value received through the `self_connection_status` callback.
+ *
+ * @deprecated This getter is deprecated. Use the event and store the status
+ * in the client state.
  */
 TOX_CONNECTION tox_self_get_connection_status(const Tox *tox);
 
@@ -1544,6 +1566,9 @@ void tox_callback_friend_status_message(Tox *tox, tox_friend_status_message_cb *
  *
  * The status returned is equal to the last status received through the
  * `friend_status` callback.
+ *
+ * @deprecated This getter is deprecated. Use the event and store the status
+ *   in the client state.
  */
 TOX_USER_STATUS tox_friend_get_status(const Tox *tox, uint32_t friend_number, TOX_ERR_FRIEND_QUERY *error);
 
@@ -1582,6 +1607,9 @@ void tox_callback_friend_status(Tox *tox, tox_friend_status_cb *callback);
  *
  * @return the friend's connection status as it was received through the
  *   `friend_connection_status` event.
+ *
+ * @deprecated This getter is deprecated. Use the event and store the status
+ *   in the client state.
  */
 TOX_CONNECTION tox_friend_get_connection_status(const Tox *tox, uint32_t friend_number, TOX_ERR_FRIEND_QUERY *error);
 
@@ -1614,6 +1642,9 @@ void tox_callback_friend_connection_status(Tox *tox, tox_friend_connection_statu
  * @return true if the friend is typing.
  * @return false if the friend is not typing, or the friend number was
  *   invalid. Inspect the error code to determine which case it is.
+ *
+ * @deprecated This getter is deprecated. Use the event and store the status
+ *   in the client state.
  */
 bool tox_friend_get_typing(const Tox *tox, uint32_t friend_number, TOX_ERR_FRIEND_QUERY *error);
 

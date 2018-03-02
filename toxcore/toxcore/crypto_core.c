@@ -86,14 +86,21 @@ int32_t public_key_cmp(const uint8_t *pk1, const uint8_t *pk2)
     return crypto_verify_32(pk1, pk2);
 }
 
-uint32_t random_int(void)
+uint16_t random_u16(void)
 {
-    uint32_t randnum;
-    randombytes((uint8_t *)&randnum , sizeof(randnum));
+    uint16_t randnum;
+    randombytes((uint8_t *)&randnum, sizeof(randnum));
     return randnum;
 }
 
-uint64_t random_64b(void)
+uint32_t random_u32(void)
+{
+    uint32_t randnum;
+    randombytes((uint8_t *)&randnum, sizeof(randnum));
+    return randnum;
+}
+
+uint64_t random_u64(void)
 {
     uint64_t randnum;
     randombytes((uint8_t *)&randnum, sizeof(randnum));
@@ -212,7 +219,7 @@ void increment_nonce(uint8_t *nonce)
 
 static uint32_t host_to_network(uint32_t x)
 {
-#if BYTE_ORDER == LITTLE_ENDIAN
+#if !defined(BYTE_ORDER) || BYTE_ORDER == LITTLE_ENDIAN
     return
         ((x >> 24) & 0x000000FF) | // move byte 3 to byte 0
         ((x >> 8)  & 0x0000FF00) | // move byte 2 to byte 1

@@ -82,39 +82,39 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
 {
     Messenger_Options m_options = {0};
 
-    bool load_savedata_sk = 0, load_savedata_tox = 0;
+    bool load_savedata_sk = false, load_savedata_tox = false;
 
     m_options.client_caps = options->client_capabilities;
 
-    if (options == NULL) {
+    if (options == nullptr) {
         m_options.ipv6enabled = TOX_ENABLE_IPV6_DEFAULT;
     } else {
         if (tox_options_get_savedata_type(options) != TOX_SAVEDATA_TYPE_NONE) {
-            if (tox_options_get_savedata_data(options) == NULL || tox_options_get_savedata_length(options) == 0) {
+            if (tox_options_get_savedata_data(options) == nullptr || tox_options_get_savedata_length(options) == 0) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_BAD_FORMAT);
-                return NULL;
+                return nullptr;
             }
         }
 
         if (tox_options_get_savedata_type(options) == TOX_SAVEDATA_TYPE_SECRET_KEY) {
             if (tox_options_get_savedata_length(options) != TOX_SECRET_KEY_SIZE) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_BAD_FORMAT);
-                return NULL;
+                return nullptr;
             }
 
-            load_savedata_sk = 1;
+            load_savedata_sk = true;
         } else if (tox_options_get_savedata_type(options) == TOX_SAVEDATA_TYPE_TOX_SAVE) {
             if (tox_options_get_savedata_length(options) < TOX_ENC_SAVE_MAGIC_LENGTH) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_BAD_FORMAT);
-                return NULL;
+                return nullptr;
             }
 
             if (crypto_memcmp(tox_options_get_savedata_data(options), TOX_ENC_SAVE_MAGIC_NUMBER, TOX_ENC_SAVE_MAGIC_LENGTH) == 0) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_LOAD_ENCRYPTED);
-                return NULL;
+                return nullptr;
             }
 
-            load_savedata_tox = 1;
+            load_savedata_tox = true;
         }
 
         m_options.ipv6enabled = tox_options_get_ipv6_enabled(options);
@@ -143,25 +143,25 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
 
             default:
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_PROXY_BAD_TYPE);
-                return NULL;
+                return nullptr;
         }
 
         if (m_options.proxy_info.proxy_type != TCP_PROXY_NONE) {
             if (tox_options_get_proxy_port(options) == 0) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_PROXY_BAD_PORT);
-                return NULL;
+                return nullptr;
             }
 
             ip_init(&m_options.proxy_info.ip_port.ip, m_options.ipv6enabled);
 
             if (m_options.ipv6enabled) {
-                m_options.proxy_info.ip_port.ip.family = AF_UNSPEC;
+                m_options.proxy_info.ip_port.ip.family = TOX_AF_UNSPEC;
             }
 
-            if (!addr_resolve_or_parse_ip(tox_options_get_proxy_host(options), &m_options.proxy_info.ip_port.ip, NULL)) {
+            if (addr_resolve_or_parse_ip(tox_options_get_proxy_host(options), &m_options.proxy_info.ip_port.ip, nullptr) == 0) {
                 SET_ERROR_PARAMETER(error, TOX_ERR_NEW_PROXY_BAD_HOST);
                 // TODO(irungentoo): TOX_ERR_NEW_PROXY_NOT_FOUND if domain.
-                return NULL;
+                return nullptr;
             }
 
             m_options.proxy_info.ip_port.port = net_htons(tox_options_get_proxy_port(options));
@@ -182,7 +182,7 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
             SET_ERROR_PARAMETER(error, TOX_ERR_NEW_MALLOC);
         }
 
-        return NULL;
+        return nullptr;
     }
 
     if (load_savedata_tox
@@ -200,7 +200,7 @@ Tox *tox_new(const struct Tox_Options *options, TOX_ERR_NEW *error)
 
 void tox_kill(Tox *tox)
 {
-    if (tox == NULL) {
+    if (tox == nullptr) {
         return;
     }
 
@@ -237,9 +237,10 @@ bool tox_bootstrap(Tox *tox, const char *address, uint16_t port, const uint8_t *
 
     IP_Port *root;
 
-    int32_t count = net_getipport(address, &root, SOCK_DGRAM);
+    int32_t count = net_getipport(address, &root, TOX_SOCK_DGRAM);
 
     if (count == -1) {
+        net_freeipport(root);
         SET_ERROR_PARAMETER(error, TOX_ERR_BOOTSTRAP_BAD_HOST);
         return 0;
     }
@@ -247,7 +248,7 @@ bool tox_bootstrap(Tox *tox, const char *address, uint16_t port, const uint8_t *
     unsigned int i;
 
     for (i = 0; i < count; i++) {
-        root[i].port = htons(port);
+        root[i].port = net_htons(port);
 
         Messenger *m = tox;
         onion_add_bs_path_node(m->onion_c, root[i], public_key);
@@ -280,9 +281,10 @@ bool tox_add_tcp_relay(Tox *tox, const char *address, uint16_t port, const uint8
 
     IP_Port *root;
 
-    int32_t count = net_getipport(address, &root, SOCK_STREAM);
+    int32_t count = net_getipport(address, &root, TOX_SOCK_STREAM);
 
     if (count == -1) {
+        net_freeipport(root);
         SET_ERROR_PARAMETER(error, TOX_ERR_BOOTSTRAP_BAD_HOST);
         return 0;
     }
@@ -290,7 +292,7 @@ bool tox_add_tcp_relay(Tox *tox, const char *address, uint16_t port, const uint8
     unsigned int i;
 
     for (i = 0; i < count; i++) {
-        root[i].port = htons(port);
+        root[i].port = net_htons(port);
 
         Messenger *m = tox;
         add_tcp_relay(m->net_crypto, root[i], public_key);
@@ -355,13 +357,13 @@ void tox_self_get_address(const Tox *tox, uint8_t *address)
 void tox_self_set_nospam(Tox *tox, uint32_t nospam)
 {
     Messenger *m = tox;
-    set_nospam(&(m->fr), net_htonl(nospam));
+    set_nospam(m->fr, net_htonl(nospam));
 }
 
 uint32_t tox_self_get_nospam(const Tox *tox)
 {
     const Messenger *m = tox;
-    return net_ntohl(get_nospam(&(m->fr)));
+    return net_ntohl(get_nospam(m->fr));
 }
 
 void tox_self_get_public_key(const Tox *tox, uint8_t *public_key)
@@ -369,7 +371,7 @@ void tox_self_get_public_key(const Tox *tox, uint8_t *public_key)
     const Messenger *m = tox;
 
     if (public_key) {
-        memcpy(public_key, m->net_crypto->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
+        memcpy(public_key, nc_get_self_public_key(m->net_crypto), CRYPTO_PUBLIC_KEY_SIZE);
     }
 }
 
@@ -378,7 +380,7 @@ void tox_self_get_secret_key(const Tox *tox, uint8_t *secret_key)
     const Messenger *m = tox;
 
     if (secret_key) {
-        memcpy(secret_key, m->net_crypto->self_secret_key, CRYPTO_SECRET_KEY_SIZE);
+        memcpy(secret_key, nc_get_self_secret_key(m->net_crypto), CRYPTO_SECRET_KEY_SIZE);
     }
 }
 
@@ -457,7 +459,8 @@ void tox_self_set_status(Tox *tox, TOX_USER_STATUS status)
 TOX_USER_STATUS tox_self_get_status(const Tox *tox)
 {
     const Messenger *m = tox;
-    return (TOX_USER_STATUS)m_get_self_userstatus(m);
+    const uint8_t status = m_get_self_userstatus(m);
+    return (TOX_USER_STATUS)status;
 }
 
 static void set_friend_error(int32_t ret, TOX_ERR_FRIEND_ADD *error)
@@ -1126,7 +1129,7 @@ void tox_callback_conference_namelist_change(Tox *tox, tox_conference_namelist_c
 uint32_t tox_conference_new(Tox *tox, TOX_ERR_CONFERENCE_NEW *error)
 {
     Messenger *m = tox;
-    int ret = add_groupchat((Group_Chats *)m->conferences_object, GROUPCHAT_TYPE_TEXT, NULL);
+    int ret = add_groupchat((Group_Chats *)m->conferences_object, GROUPCHAT_TYPE_TEXT, nullptr);
 
     if (ret == -1) {
         SET_ERROR_PARAMETER(error, TOX_ERR_CONFERENCE_NEW_INIT);
@@ -1604,14 +1607,14 @@ void tox_self_get_dht_id(const Tox *tox, uint8_t *dht_id)
 {
     if (dht_id) {
         const Messenger *m = tox;
-        memcpy(dht_id, m->dht->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
+        memcpy(dht_id, dht_get_self_public_key(m->dht), CRYPTO_PUBLIC_KEY_SIZE);
     }
 }
 
 uint16_t tox_self_get_udp_port(const Tox *tox, TOX_ERR_GET_PORT *error)
 {
     const Messenger *m = tox;
-    uint16_t port = net_htons(m->net->port);
+    uint16_t port = net_htons(net_port(m->net));
 
     if (port) {
         SET_ERROR_PARAMETER(error, TOX_ERR_GET_PORT_OK);

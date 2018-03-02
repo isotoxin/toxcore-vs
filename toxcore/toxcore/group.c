@@ -259,12 +259,12 @@ static aint get_peer_index(const Group_c *g, uint16_t peer_gid)
 
 static uint16_t find_new_peer_gid(const Group_c *g)
 {
-    uint16_t peer_number = random_int() & 0xffff;
+    uint16_t peer_number = random_u16();
 
     size_t tries = 0;
 
     while (get_peer_index(g, peer_number) != -1) {
-        peer_number = random_int() & 0xffff;
+        peer_number = random_u16();
         ++tries;
 
         if (tries > 32) {
@@ -1033,8 +1033,8 @@ int add_groupchat(Group_Chats *g_c, uint8_t type, const uint8_t *uid)
     }
 
     g->identifier[0] = type;
-    memcpy(g->real_pk, g_c->m->net_crypto->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
-    aint peer_index = addpeer(g, groupnumber, g->real_pk, g_c->m->dht->self_public_key, -1);
+    memcpy(g->real_pk, nc_get_self_public_key(g_c->m->net_crypto), CRYPTO_PUBLIC_KEY_SIZE);
+    aint peer_index = addpeer(g, groupnumber, g->real_pk, dht_get_self_public_key(g_c->m->dht), -1);
 
     if (peer_index == -1) {
         return -1;
@@ -1437,7 +1437,7 @@ static bool send_packet_group_peer(Friend_Connections *fr_c, aint friendcon_id, 
     packet[0] = packet_id;
     memcpy(packet + 1, &other_group_num, sizeof(uint16_t));
     memcpy(packet + 1 + sizeof(uint16_t), data, length);
-    return write_cryptpacket(fr_c->net_crypto, friend_connection_crypt_connection_id(fr_c, (int)friendcon_id), packet,
+    return write_cryptpacket(friendconn_net_crypto(fr_c), friend_connection_crypt_connection_id(fr_c, (int)friendcon_id), packet,
                              (uint16_t)plen, 0) != -1;
 }
 
@@ -1460,7 +1460,7 @@ static bool send_lossy_group_peer(Friend_Connections *fr_c, aint friendcon_id, u
     packet[0] = packet_id;
     memcpy(packet + 1, &group_num, sizeof(uint16_t));
     memcpy(packet + 1 + sizeof(uint16_t), data, length);
-    return send_lossy_cryptpacket(fr_c->net_crypto, friend_connection_crypt_connection_id(fr_c, (int)friendcon_id), packet,
+    return send_lossy_cryptpacket(friendconn_net_crypto(fr_c), friend_connection_crypt_connection_id(fr_c, (int)friendcon_id), packet,
                                   (uint16_t)plen) != -1;
 }
 
@@ -1558,12 +1558,12 @@ int join_groupchat(Group_Chats *g_c, int32_t friendnumber, uint8_t expected_type
         return -3;
     }
 
-    memcpy(g->real_pk, g_c->m->net_crypto->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
+    memcpy(g->real_pk, nc_get_self_public_key(g_c->m->net_crypto), CRYPTO_PUBLIC_KEY_SIZE);
 
     g->dirty_list = true;
     g->need_send_name = true;
 
-    aint peer_index = addpeer(g, groupnumber, g->real_pk, g_c->m->dht->self_public_key,
+    aint peer_index = addpeer(g, groupnumber, g->real_pk, dht_get_self_public_key(g_c->m->dht),
                               g->auto_join ? get_self_peer_gid(g) : -1);
 
     if (peer_index != -1) {
@@ -1829,7 +1829,7 @@ static void change_self_peer_gid(Group_Chats *g_c, aint groupnumber, int self_pe
 
     /* no self peer found! Add it */
 
-    aint peer_index = addpeer(g, groupnumber, g->real_pk, g_c->m->dht->self_public_key, self_peer_gid);
+    aint peer_index = addpeer(g, groupnumber, g->real_pk, dht_get_self_public_key(g_c->m->dht), self_peer_gid);
 
     if (peer_index == -1) {
         return;
@@ -1843,7 +1843,7 @@ static void change_self_peer_gid(Group_Chats *g_c, aint groupnumber, int self_pe
  * return -1 on failure
  */
 static int group_new_peer_send(Group_Chats *g_c, aint groupnumber, uint16_t peer_gid, const uint8_t *real_pk,
-                               uint8_t *temp_pk)
+                               const uint8_t *temp_pk)
 {
 
     uint8_t packet[GROUP_MESSAGE_NEW_PEER_LENGTH];
@@ -2168,7 +2168,7 @@ static void handle_friend_invite_packet(Messenger *m, uint32_t friendnumber, con
                 uint8_t nosuchgroup[GROUP_IDENTIFIER_LENGTH + CRYPTO_PUBLIC_KEY_SIZE];
                 nosuchgroup[0] = INVITE_UNSUBSCRIBE_ID;
                 memcpy(nosuchgroup + 1, conference_id, GROUP_IDENTIFIER_LENGTH - 1);
-                memcpy(nosuchgroup + GROUP_IDENTIFIER_LENGTH, g_c->m->net_crypto->self_public_key, CRYPTO_PUBLIC_KEY_SIZE);
+                memcpy(nosuchgroup + GROUP_IDENTIFIER_LENGTH, nc_get_self_public_key(g_c->m->net_crypto), CRYPTO_PUBLIC_KEY_SIZE);
                 send_conference_invite_packet(g_c->m, friendnumber, nosuchgroup, sizeof(nosuchgroup));
                 return;
             }
@@ -2251,7 +2251,7 @@ static aint send_packet_online(Friend_Connections *fr_c, aint friendcon_id, uint
     packet[0] = PACKET_ID_ONLINE_PACKET;
     memcpy(packet + 1, &my_group_num, sizeof(uint16_t));
     memcpy(packet + 1 + sizeof(uint16_t), identifier, GROUP_IDENTIFIER_LENGTH);
-    return write_cryptpacket(fr_c->net_crypto, friend_connection_crypt_connection_id(fr_c, (int)friendcon_id), packet,
+    return write_cryptpacket(friendconn_net_crypto(fr_c), friend_connection_crypt_connection_id(fr_c, (int)friendcon_id), packet,
                              sizeof(packet), 0) != -1;
 }
 
@@ -2525,7 +2525,7 @@ static void handle_direct_packet(Group_Chats *g_c, aint groupnumber, const uint8
                     }
 
                     if (self_peer_gid >= 0) {
-                        group_new_peer_send(g_c, groupnumber, self_peer_gid, g->real_pk, g_c->m->dht->self_public_key);
+                        group_new_peer_send(g_c, groupnumber, self_peer_gid, g->real_pk, dht_get_self_public_key(g_c->m->dht));
                     }
                 }
             }
@@ -3022,7 +3022,7 @@ static void handle_message_packet_group(Group_Chats *g_c, int groupnumber, const
             if (self_peer_gid >= 0 && self_peer_gid_collision(g)) {
                 self_peer_gid = find_new_peer_gid(g);
                 change_self_peer_gid(g_c, groupnumber, self_peer_gid);
-                group_new_peer_send(g_c, groupnumber, (uint16_t)self_peer_gid, g->real_pk, g_c->m->dht->self_public_key);
+                group_new_peer_send(g_c, groupnumber, (uint16_t)self_peer_gid, g->real_pk, dht_get_self_public_key(g_c->m->dht));
             }
         }
         break;

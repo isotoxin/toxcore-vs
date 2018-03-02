@@ -59,12 +59,6 @@
 #define PING_ROUNDTRIP 2
 #define BAD_NODE_TIMEOUT (PING_INTERVAL + PINGS_MISSED_NODE_GOES_BAD * (PING_INTERVAL + PING_ROUNDTRIP))
 
-/* Redefinitions of variables for safe transfer over wire. */
-#define TOX_AF_INET 2
-#define TOX_AF_INET6 10
-#define TOX_TCP_INET 130
-#define TOX_TCP_INET6 138
-
 /* The number of "fake" friends to add (for optimization purposes and so our paths for the onion part are more random) */
 #define DHT_FAKE_FRIEND_NUMBER 2
 
@@ -94,12 +88,6 @@ int create_request(const uint8_t *send_public_key, const uint8_t *send_secret_ke
    return -1 if not valid request. */
 int handle_request(const uint8_t *self_public_key, const uint8_t *self_secret_key, uint8_t *public_key, uint8_t *data,
                    uint8_t *request_id, const uint8_t *packet, uint16_t length);
-
-/* Functions to transfer ips safely across wire. */
-void to_net_family(IP *ip);
-
-/* return 0 on success, -1 on failure. */
-int to_host_family(IP *ip);
 
 typedef struct {
     IP_Port     ip_port;
@@ -192,6 +180,20 @@ typedef struct {
  */
 int packed_node_size(uint8_t ip_family);
 
+/* Packs an IP_Port structure into data of max size length.
+ *
+ * Returns size of packed IP_Port data on success
+ * Return -1 on failure.
+ */
+int pack_ip_port(uint8_t *data, uint16_t length, const IP_Port *ip_port);
+
+/* Unpack IP_Port structure from data of max size length into ip_port.
+ *
+ * Return size of unpacked ip_port on success.
+ * Return -1 on failure.
+ */
+int unpack_ip_port(IP_Port *ip_port, const uint8_t *data, uint16_t length, uint8_t tcp_enabled);
+
 /* Pack number of nodes into data of maxlength length.
  *
  * return length of packed nodes on success.
@@ -214,14 +216,17 @@ int unpack_nodes(Node_format *nodes, uint16_t max_num_nodes, uint16_t *processed
 /* struct to store some shared keys so we don't have to regenerate them for each request. */
 #define MAX_KEYS_PER_SLOT 4
 #define KEYS_TIMEOUT 600
+
 typedef struct {
-    struct {
-        uint8_t public_key[CRYPTO_PUBLIC_KEY_SIZE];
-        uint8_t shared_key[CRYPTO_SHARED_KEY_SIZE];
-        uint32_t times_requested;
-        uint8_t  stored; /* 0 if not, 1 if is */
-        uint64_t time_last_requested;
-    } keys[256 * MAX_KEYS_PER_SLOT];
+    uint8_t public_key[CRYPTO_PUBLIC_KEY_SIZE];
+    uint8_t shared_key[CRYPTO_SHARED_KEY_SIZE];
+    uint32_t times_requested;
+    uint8_t  stored; /* 0 if not, 1 if is */
+    uint64_t time_last_requested;
+} Shared_Key;
+
+typedef struct {
+    Shared_Key keys[256 * MAX_KEYS_PER_SLOT];
 } Shared_Keys;
 
 /*----------------------------------------------------------------------------------*/
@@ -234,42 +239,23 @@ typedef struct {
     void *object;
 } Cryptopacket_Handles;
 
-typedef struct {
-    Logger *log;
-    Networking_Core *net;
+#define DHT_DEFINED
+typedef struct DHT DHT;
 
-    bool hole_punching_enabled;
+const uint8_t *dht_get_self_public_key(const DHT *dht);
+const uint8_t *dht_get_self_secret_key(const DHT *dht);
+void dht_set_self_public_key(DHT *dht, const uint8_t *key);
+void dht_set_self_secret_key(DHT *dht, const uint8_t *key);
 
-    Client_data    close_clientlist[LCLIENT_LIST];
-    uint64_t       close_lastgetnodes;
-    uint32_t       close_bootstrap_times;
+Networking_Core *dht_get_net(const DHT *dht);
+struct Ping *dht_get_ping(const DHT *dht);
+const Client_data *dht_get_close_clientlist(const DHT *dht);
+const Client_data *dht_get_close_client(const DHT *dht, uint32_t client_num);
+uint16_t dht_get_num_friends(const DHT *dht);
 
-    /* Note: this key should not be/is not used to transmit any sensitive materials */
-    uint8_t      secret_symmetric_key[CRYPTO_SYMMETRIC_KEY_SIZE];
-    /* DHT keypair */
-    uint8_t self_public_key[CRYPTO_PUBLIC_KEY_SIZE];
-    uint8_t self_secret_key[CRYPTO_SECRET_KEY_SIZE];
+DHT_Friend *dht_get_friend(DHT *dht, uint32_t friend_num);
+const uint8_t *dht_get_friend_public_key(const DHT *dht, uint32_t friend_num);
 
-    DHT_Friend    *friends_list;
-    uint16_t       num_friends;
-
-    Node_format   *loaded_nodes_list;
-    uint32_t       loaded_num_nodes;
-    unsigned int   loaded_nodes_index;
-
-    Shared_Keys shared_keys_recv;
-    Shared_Keys shared_keys_sent;
-
-    struct PING   *ping;
-    Ping_Array    dht_ping_array;
-    Ping_Array    dht_harden_ping_array;
-    uint64_t       last_run;
-
-    Cryptopacket_Handles cryptopackethandlers[256];
-
-    Node_format to_bootstrap[MAX_CLOSE_TO_BOOTSTRAP_NODES];
-    unsigned int num_to_bootstrap;
-} DHT;
 /*----------------------------------------------------------------------------------*/
 
 /* Shared key generations are costly, it is therefor smart to store commonly used
@@ -427,7 +413,7 @@ void cryptopacket_registerhandler(DHT *dht, uint8_t byte, cryptopacket_handler_c
 uint32_t DHT_size(const DHT *dht);
 
 /* Save the DHT in data where data is an array of size DHT_size(). */
-void DHT_save(DHT *dht, uint8_t *data);
+void DHT_save(const DHT *dht, uint8_t *data);
 
 /* Load the DHT from data of size size.
  *
@@ -441,17 +427,17 @@ DHT *new_DHT(Logger *log, Networking_Core *net, bool holepunching_enabled);
 
 void kill_DHT(DHT *dht);
 
-/*  return 0 if we are not connected to the DHT.
- *  return 1 if we are.
+/*  return false if we are not connected to the DHT.
+ *  return true if we are.
  */
-int DHT_isconnected(const DHT *dht);
+bool DHT_isconnected(const DHT *dht);
 
-/*  return 0 if we are not connected or only connected to lan peers with the DHT.
- *  return 1 if we are.
+/*  return false if we are not connected or only connected to lan peers with the DHT.
+ *  return true if we are.
  */
-int DHT_non_lan_connected(const DHT *dht);
+bool DHT_non_lan_connected(const DHT *dht);
 
 
-int addto_lists(DHT *dht, IP_Port ip_port, const uint8_t *public_key);
+uint32_t addto_lists(DHT *dht, IP_Port ip_port, const uint8_t *public_key);
 
 #endif
